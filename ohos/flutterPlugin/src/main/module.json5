@@ -1,0 +1,18 @@
+{
+  "module": {
+    "name": "flutterPlugin",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.CAMERA",
+        "reason": "$string:request_perm",
+        "usedScene": {
+          "when": "inuse"
+        }
+      }
+    ]
+  },
+}
