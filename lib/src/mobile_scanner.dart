@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -225,22 +227,37 @@ class _MobileScannerState extends State<MobileScanner>
               return Stack(
                 alignment: Alignment.center,
                 children: [
-                  _scanner(
-                    value.size,
-                    value.webId,
-                    value.textureId,
-                    value.numberOfCameras,
-                  ),
+                  if (Platform.operatingSystem == 'ohos')
+                    _scannerOhos(
+                      value.size,
+                      value.webId,
+                      value.textureId,
+                      value.numberOfCameras,
+                    )
+                  else
+                    _scanner(
+                      value.size,
+                      value.webId,
+                      value.textureId,
+                      value.numberOfCameras,
+                    ),
                   widget.overlay!,
                 ],
               );
             } else {
-              return _scanner(
-                value.size,
-                value.webId,
-                value.textureId,
-                value.numberOfCameras,
-              );
+              return Platform.operatingSystem == 'ohos'
+                  ? _scannerOhos(
+                      value.size,
+                      value.webId,
+                      value.textureId,
+                      value.numberOfCameras,
+                    )
+                  : _scanner(
+                      value.size,
+                      value.webId,
+                      value.textureId,
+                      value.numberOfCameras,
+                    );
             }
           },
         );
@@ -271,6 +288,39 @@ class _MobileScannerState extends State<MobileScanner>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _scannerOhos(
+    Size size,
+    String? webId,
+    int? textureId,
+    int? numberOfCameras,
+  ) {
+    return Center(
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Transform.rotate(
+          angle: 90 * math.pi / 180,
+          child: ClipRect(
+            child: LayoutBuilder(
+              builder: (_, constraints) {
+                return SizedBox.fromSize(
+                  size: constraints.biggest,
+                  child: FittedBox(
+                    fit: widget.fit,
+                    child: SizedBox(
+                      width: size.width,
+                      height: size.height,
+                      child: Texture(textureId: textureId!),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
