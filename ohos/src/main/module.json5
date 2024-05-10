@@ -1,6 +1,6 @@
 {
   "module": {
-    "name": "flutterPlugin",
+    "name": "mobile_scanner",
     "type": "har",
     "deviceTypes": [
       "default",

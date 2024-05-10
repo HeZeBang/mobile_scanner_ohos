@@ -1,3 +1,7 @@
-/.hvigor
-local.properties
-oh_modules
+/node_modules
+/oh_modules
+/.preview
+/build
+/.cxx
+/.test
+flutter_embedding.har
