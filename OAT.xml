@@ -94,6 +94,7 @@
                 <filteritem type="filename" name="**.dart" desc="dart原始代码"/>
                 <filteritem type="filename" name="**.md" desc="markdown说明文件"/>
                 <filteritem type="filename" name="hvigorw.bat" desc="hvigorw编译程序，不影响兼容性"/>
+                <filteritem type="filename" name=".metadata" desc="自动生成的文件"/>
                 <filteritem type="filename" name="analysis_options.yaml" desc="flutter自动生成的文件，dart代码分析配置"/>
                 <filteritem type="filename" name="BuildProfile.ets" desc="ohos自动生成的文件，编译配置"/>
                 <filteritem type="filename" name="GeneratedPluginRegistrant.ets" desc="flutter自动生成的文件"/>
@@ -112,6 +113,7 @@
                 <filteritem type="filename" name="**.dart" desc="dart原始代码"/>
                 <filteritem type="filename" name="**.md" desc="markdown说明文件"/>
                 <filteritem type="filename" name="hvigorw.bat" desc="hvigorw编译程序，不影响兼容性"/>
+                <filteritem type="filename" name=".metadata" desc="自动生成的文件"/>
                 <filteritem type="filename" name="analysis_options.yaml" desc="flutter自动生成的文件，dart代码分析配置"/>
                 <filteritem type="filename" name="BuildProfile.ets" desc="ohos自动生成的文件，编译配置"/>
                 <filteritem type="filename" name="GeneratedPluginRegistrant.ets" desc="flutter自动生成的文件"/>
@@ -126,6 +128,7 @@
                 <filteritem type="filename" name="**.dart" desc="dart原始代码"/>
                 <filteritem type="filename" name="**.md" desc="markdown说明文件"/>
                 <filteritem type="filename" name="hvigorw.bat" desc="hvigorw编译程序，不影响兼容性"/>
+                <filteritem type="filename" name=".metadata" desc="自动生成的文件"/>
                 <filteritem type="filename" name="analysis_options.yaml" desc="flutter自动生成的文件，dart代码分析配置"/>
                 <filteritem type="filename" name="BuildProfile.ets" desc="ohos自动生成的文件，编译配置"/>
                 <filteritem type="filename" name="GeneratedPluginRegistrant.ets" desc="flutter自动生成的文件"/>
