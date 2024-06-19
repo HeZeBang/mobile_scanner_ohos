@@ -91,8 +91,7 @@ class MobileScanner extends StatefulWidget {
   State<MobileScanner> createState() => _MobileScannerState();
 }
 
-class _MobileScannerState extends State<MobileScanner>
-    with WidgetsBindingObserver {
+class _MobileScannerState extends State<MobileScanner> with WidgetsBindingObserver {
   /// The subscription that listens to barcode detection.
   StreamSubscription<BarcodeCapture>? _barcodesSubscription;
 
@@ -116,8 +115,7 @@ class _MobileScannerState extends State<MobileScanner>
           );
     }
 
-    return widget.placeholderBuilder?.call(context, child) ??
-        const ColoredBox(color: Colors.black);
+    return widget.placeholderBuilder?.call(context, child) ?? const ColoredBox(color: Colors.black);
   }
 
   /// Start the given [scanner].
@@ -281,9 +279,7 @@ class _MobileScannerState extends State<MobileScanner>
               child: SizedBox(
                 width: size.width,
                 height: size.height,
-                child: kIsWeb
-                    ? HtmlElementView(viewType: webId!)
-                    : Texture(textureId: textureId!),
+                child: kIsWeb ? HtmlElementView(viewType: webId!) : Texture(textureId: textureId!),
               ),
             ),
           );
@@ -299,27 +295,21 @@ class _MobileScannerState extends State<MobileScanner>
     int? numberOfCameras,
   ) {
     return Center(
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: Transform.rotate(
-          angle: 90 * math.pi / 180,
-          child: ClipRect(
-            child: LayoutBuilder(
-              builder: (_, constraints) {
-                return SizedBox.fromSize(
-                  size: constraints.biggest,
-                  child: FittedBox(
-                    fit: widget.fit,
-                    child: SizedBox(
-                      width: size.width,
-                      height: size.height,
-                      child: Texture(textureId: textureId!),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+      child: ClipRect(
+        child: LayoutBuilder(
+          builder: (_, constraints) {
+            return SizedBox.fromSize(
+              size: constraints.biggest,
+              child: FittedBox(
+                fit: widget.fit,
+                child: SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: Texture(textureId: textureId!),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
