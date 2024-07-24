@@ -13,6 +13,7 @@
 * limitations under the License.
 */
 
+import { scanCore } from '@kit.ScanKit';
 export enum BarcodeFormat {
   /// A barcode format that represents all unknown formats.
   unknown = -1,
@@ -106,4 +107,103 @@ export class Barcode {
   rawValue: string = '';
   format: BarcodeFormat = BarcodeFormat.unknown;
   type: BarcodeType = BarcodeType.unknown;
+
+  static convertScanType(value:scanCore.ScanType):BarcodeFormat {
+    let format = BarcodeFormat.unknown
+
+    switch(value) {
+      case scanCore.ScanType.AZTEC_CODE:
+        format = BarcodeFormat.aztec
+        break
+      case scanCore.ScanType.CODABAR_CODE:
+        format = BarcodeFormat.codabar
+        break
+      case scanCore.ScanType.CODE39_CODE:
+        format = BarcodeFormat.code39
+        break
+      case scanCore.ScanType.CODE93_CODE:
+        format = BarcodeFormat.code93
+        break
+      case scanCore.ScanType.CODE128_CODE:
+        format = BarcodeFormat.code128
+        break
+      case scanCore.ScanType.DATAMATRIX_CODE:
+        format = BarcodeFormat.dataMatrix
+        break
+      case scanCore.ScanType.EAN8_CODE:
+        format = BarcodeFormat.ean8
+        break
+      case scanCore.ScanType.EAN13_CODE:
+        format = BarcodeFormat.ean13
+        break
+      case scanCore.ScanType.ITF14_CODE:
+        format = BarcodeFormat.itf
+        break
+      case scanCore.ScanType.PDF417_CODE:
+        format = BarcodeFormat.pdf417
+        break
+      case scanCore.ScanType.QR_CODE:
+        format = BarcodeFormat.qrCode
+        break
+      case scanCore.ScanType.UPC_A_CODE:
+        format = BarcodeFormat.upcA
+        break
+      case scanCore.ScanType.UPC_E_CODE:
+        format = BarcodeFormat.upcE
+        break
+    }
+
+    return format
+  }
+
+  static convertToScanType(value:BarcodeFormat): scanCore.ScanType{
+    let type = scanCore.ScanType.FORMAT_UNKNOWN
+
+    switch(value) {
+      case BarcodeFormat.aztec:
+        type = scanCore.ScanType.AZTEC_CODE
+        break
+      case BarcodeFormat.codabar:
+        type = scanCore.ScanType.CODABAR_CODE
+        break
+      case BarcodeFormat.code39:
+        type = scanCore.ScanType.CODE39_CODE
+        break
+      case BarcodeFormat.code93:
+        type = scanCore.ScanType.CODE93_CODE
+        break
+      case BarcodeFormat.code128:
+        type = scanCore.ScanType.CODE128_CODE
+        break
+      case BarcodeFormat.dataMatrix:
+        type = scanCore.ScanType.DATAMATRIX_CODE
+        break
+      case BarcodeFormat.ean8:
+        type = scanCore.ScanType.EAN8_CODE
+        break
+      case BarcodeFormat.ean13:
+        type = scanCore.ScanType.EAN13_CODE
+        break
+      case BarcodeFormat.itf:
+        type = scanCore.ScanType.ITF14_CODE
+        break
+      case BarcodeFormat.pdf417:
+        type = scanCore.ScanType.PDF417_CODE
+        break
+      case  BarcodeFormat.qrCode:
+        type = scanCore.ScanType.QR_CODE
+        break
+      case BarcodeFormat.upcA:
+        type = scanCore.ScanType.UPC_A_CODE
+        break
+      case BarcodeFormat.upcE:
+        type = scanCore.ScanType.UPC_E_CODE
+        break
+      case BarcodeFormat.all:
+        type = scanCore.ScanType.ALL
+        break
+    }
+
+    return type
+  }
 }

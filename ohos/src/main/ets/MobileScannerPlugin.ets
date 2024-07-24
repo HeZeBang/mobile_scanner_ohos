@@ -26,9 +26,10 @@ import Log from '@ohos/flutter_ohos/src/main/ets/util/Log';
 import { AbilityAware, AbilityPluginBinding, ByteBuffer } from '@ohos/flutter_ohos/index';
 import { UIAbility } from '@kit.AbilityKit';
 import { cameraPermission, checkPermissions, requestPermissions } from './CameraPermissions';
-import { customScan, scanBarcode, scanCore } from '@kit.ScanKit';
+import { customScan, scanBarcode, scanCore, detectBarcode } from '@kit.ScanKit';
 import EventChannel, { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventChannel';
 import { Barcode, BarcodeFormat, BarcodeType } from './Barcode';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 const TAG: string = "mobile_scanner";
 
@@ -164,8 +165,19 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     if (!this.isStart) {
       this.isStart = true;
 
+      let scanTypes = [scanCore.ScanType.ALL]
+      if (formats) {
+        scanTypes = []
+        formats.forEach((format:number) => {
+          let type = Barcode.convertToScanType(format)
+          if (type != scanCore.ScanType.FORMAT_UNKNOWN) {
+            scanTypes.push(type)
+          }
+        })
+      }
+
       const options: scanBarcode.ScanOptions = {
-        scanTypes: [scanCore.ScanType.ALL],
+        scanTypes: scanTypes,
         enableMultiMode: true,
         enableAlbum: true
       }
@@ -213,7 +225,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
-          format: BarcodeFormat.unknown,
+          format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
         } as Barcode;
       });
@@ -246,7 +258,39 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   analyzeImage(call: MethodCall, result: MethodResult) {
-    result.notImplemented()
+    const options: scanBarcode.ScanOptions = {
+      scanTypes: [scanCore.ScanType.ALL],
+      enableMultiMode: true,
+      enableAlbum: true
+    }
+    let inputImage: detectBarcode.InputImage = { uri: call.args }
+
+    detectBarcode.decode(inputImage, options, (error: BusinessError, scanResult: Array<scanBarcode.ScanResult>) => {
+      if (error && error.code) {
+        Log.e(TAG, "analyzeImage:Callback Error:" + JSON.stringify(error));
+        return
+      }
+      Log.d(TAG,  "analyzeImage:Callback scan result:" + JSON.stringify(scanResult));
+      if (scanResult.length == 0) {
+        result.success(false)
+        return
+      }
+
+      const barcodes: Barcode[] = scanResult.map(item => {
+        return {
+          displayValue: item.originalValue,
+          rawValue: item.originalValue,
+          format: Barcode.convertScanType(item.scanType),
+          type: BarcodeType.unknown,
+        } as Barcode;
+      });
+      this.publishEvent({
+        name: 'barcode',
+        data: barcodes
+      })
+
+      result.success(true)
+    })
   }
 
   setScale(call: MethodCall, result: MethodResult) {
@@ -287,13 +331,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     this.publishEvent({
       "name": "error",
       "data": error
-    })
-  }
-
-  analyzerCallback(barcodes: Barcode[]) {
-    this.publishEvent({
-      name: 'barcode',
-      data: barcodes
     })
   }
 }
