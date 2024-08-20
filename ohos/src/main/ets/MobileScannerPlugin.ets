@@ -69,8 +69,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private cameraHeight: number = 0;
 
   private photoSession: camera.PhotoSession | undefined = undefined;
-  private photoOutPut: camera.PhotoOutput | undefined = undefined;
-  private photoReceiver: image.ImageReceiver | undefined = undefined;
+  private imageReceiver: image.ImageReceiver | null = null
 
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
@@ -163,7 +162,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     const timeout: number = call.argument("timeout") ?? 250
     const cameraResolutionValues: number[] | undefined = call.argument("cameraResolution")
     const useNewCameraSelector: boolean = call.argument("useNewCameraSelector") ?? false
-    let cameraResolution = [360, 360]
+    let cameraResolution = [1080, 1920]
     if (!!cameraResolutionValues && cameraResolutionValues.length >= 2) {
       cameraResolution = [cameraResolutionValues[0], cameraResolutionValues[1]]
     }
@@ -178,6 +177,12 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
       this.cameraWidth = cameraWidth;
       this.cameraHeight = cameraHeight;
+
+      this.imageReceiver = image.createImageReceiver(
+        { width: this.cameraWidth, height: this.cameraHeight},
+        image.ImageFormat.JPEG,
+        1
+      )
 
       this.cameraShootingCase()
 
@@ -201,86 +206,17 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   }
 
-  async cameraShootingCase(): Promise<void> {
-    // 创建CameraManager对象
-    let cameraManager: camera.CameraManager = camera.getCameraManager(this.binding!.getApplicationContext());
-
-    // 获取相机列表
-    let cameraDevices: Array<camera.CameraDevice> = cameraManager.getSupportedCameras();
-
-    // 获取profile对象
-    let profiles: camera.CameraOutputCapability = cameraManager.getSupportedOutputCapability(cameraDevices[0], camera.SceneMode.NORMAL_PHOTO);//获取对应相机profiles
-    let previewProfiles: Array<camera.Profile> = profiles.previewProfiles;
-
-    // 预览流1
-    let previewProfilesObj: camera.Profile = previewProfiles[0]
-
-    // 创建输出对象
-    let previewOutput: camera.PreviewOutput = cameraManager.createPreviewOutput(previewProfilesObj, this.surfaceId)
-
-    // 创建cameraInput对象
-    let cameraInput: camera.CameraInput = cameraManager.createCameraInput(cameraDevices[0])
-
-    // 创建拍照方法
-    this.photoOutPut = cameraManager.createPhotoOutput(previewProfilesObj)
-
-    let size: image.Size = {
-      width: this.cameraWidth,
-      height: this.cameraHeight
-    }
-    this.photoReceiver = image.createImageReceiver(size, image.ImageFormat.JPEG, 8)
-
-    // 打开相机
-    await cameraInput.open()
-
-    // 会话流程
-    this.photoSession = cameraManager.createSession(camera.SceneMode.NORMAL_PHOTO) as camera.PhotoSession
-
-    // 开始配置会话
-    this.photoSession.beginConfig()
-
-    // 把CameraInput加入到会话
-    this.photoSession.addInput(cameraInput)
-
-    // 把 预览流1 加入到会话
-    this.photoSession.addOutput(previewOutput)
-
-    this.photoSession.addOutput(this.photoOutPut)
-
-    // 把 预览流2 加入到会话
-    // this.photoSession.addOutput(previewOutput2)
-
-    // 提交配置信息
-    await this.photoSession.commitConfig()
-
-    // 会话开始
-    await this.photoSession.start()
-
-    this.onImageArrival()
-
-    setInterval(() => {
-      let photoCaptureSetting: camera.PhotoCaptureSetting = {
-        quality: camera.QualityLevel.QUALITY_LEVEL_HIGH, // 设置图片质量高
-        rotation: camera.ImageRotation.ROTATION_0 // 设置图片旋转角度0
-      }
-      // 使用当前拍照设置进行拍照
-      this.photoOutPut!.capture(photoCaptureSetting, (err: BusinessError) => {
-        if (err) {
-          console.error(`Failed to capture the photo ${err.message}`);
-          return;
-        }
-        console.info('Callback invoked to indicate the photo capture request success.');
-      });
-    }, 3000);
-  }
-
-  onImageArrival(): void {
-    this.photoReceiver?.on('imageArrival', () => {
-      this.photoReceiver?.readNextImage((err: BusinessError, nextImage: image.Image) => {
+  setPhotoOutputCb(photoOutput: camera.PhotoOutput): void {
+    this.imageReceiver?.on('imageArrival', () => {
+      this.imageReceiver?.readNextImage((err: BusinessError, nextImage: image.Image) => {
         if (err || nextImage === undefined) {
-          console.error('readNextImage failed')
+          console.error('readNextImage failed');
           return
-        } nextImage.getComponent(image.ComponentType.JPEG, (err: BusinessError, imageComponent: image.Component) => {
+        }
+        nextImage.getComponent(image.ComponentType.JPEG, (err: BusinessError, imageComponent: image.Component) => {
+          if (err || nextImage === undefined) {
+            console.error('getComponent failed')
+          }
           if (imageComponent && imageComponent.byteBuffer as ArrayBuffer) {
             this.scanRelease(imageComponent.byteBuffer)
           } else {
@@ -290,6 +226,79 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         })
       })
     })
+  }
+
+  async cameraShootingCase(): Promise<void> {
+    // 创建CameraManager对象
+    let cameraManager: camera.CameraManager = camera.getCameraManager(this.binding!.getApplicationContext());
+
+    // 获取相机列表
+    let cameraArray: Array<camera.CameraDevice> = cameraManager.getSupportedCameras();
+
+    // 创建相机输入流
+    let cameraInput: camera.CameraInput | undefined = undefined;
+    cameraInput = cameraManager.createCameraInput(cameraArray[0]);
+
+    // 打开相机
+    await cameraInput.open();
+
+    // 获取支持的模式类型
+    let sceneModes: Array<camera.SceneMode> = cameraManager.getSupportedSceneModes(cameraArray[0]);
+    let isSupportPhotoMode: boolean = sceneModes.indexOf(camera.SceneMode.NORMAL_PHOTO) >= 0;
+
+    // 获取相机设备支持的输出流能力
+    let cameraOutputCap: camera.CameraOutputCapability = cameraManager.getSupportedOutputCapability(cameraArray[0], camera.SceneMode.NORMAL_PHOTO);
+    let previewProfilesArray: Array<camera.Profile> = cameraOutputCap.previewProfiles;
+    let photoProfilesArray: Array<camera.Profile> = cameraOutputCap.photoProfiles;
+
+    // 创建预览输出流,其中参数 surfaceId 参考上文 XComponent 组件，预览流为XComponent组件提供的surface
+    let previewOutput: camera.PreviewOutput | undefined = undefined;
+    previewOutput = cameraManager.createPreviewOutput(previewProfilesArray[0], this.surfaceId);
+
+    // 创建拍照输出流
+    let photoOutput: camera.PhotoOutput | undefined = undefined;
+    photoOutput = cameraManager.createPhotoOutput(photoProfilesArray[0]);
+
+    //调用上面的回调函数来保存图片
+    this.setPhotoOutputCb(photoOutput);
+
+    //创建会话
+    this.photoSession = cameraManager.createSession(camera.SceneMode.NORMAL_PHOTO) as camera.PhotoSession;
+
+    // 开始配置会话
+    this.photoSession.beginConfig();
+
+    // 向会话中添加相机输入流
+    this.photoSession.addInput(cameraInput);
+
+    // 向会话中添加预览输出流
+    this.photoSession.addOutput(previewOutput);
+
+    // 向会话中添加拍照输出流
+    this.photoSession.addOutput(photoOutput);
+
+    // 提交会话配置
+    await this.photoSession.commitConfig();
+
+    // 启动会话
+    await this.photoSession.start().then(() => {
+      console.info('Promise returned to indicate the session start success.');
+    });
+
+    setInterval(() => {
+      let photoCaptureSetting: camera.PhotoCaptureSetting = {
+        quality: camera.QualityLevel.QUALITY_LEVEL_HIGH, // 设置图片质量高
+        rotation: camera.ImageRotation.ROTATION_0 // 设置图片旋转角度0
+      }
+      // 使用当前拍照设置进行拍照
+      photoOutput!.capture(photoCaptureSetting, (err: BusinessError) => {
+        if (err) {
+          console.error(`Failed to capture the photo ${err.message}`);
+          return;
+        }
+        console.info('Callback invoked to indicate the photo capture request success.');
+      });
+    }, 3000);
   }
 
   scanRelease(imageBuffer: ArrayBuffer) {
@@ -358,10 +367,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     try {
       await customScan.stop();
       await customScan.release()
-      await this.photoSession?.release()
-      await this.photoOutPut?.release()
+      this.photoSession?.release()
+      this.imageReceiver?.release()
       this.photoSession = undefined
-      this.photoOutPut = undefined
+      this.imageReceiver = null
       this.isStart = false;
     } catch (e) {
     }
@@ -459,4 +468,3 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     })
   }
 }
-
