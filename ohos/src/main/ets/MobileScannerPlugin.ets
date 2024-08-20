@@ -207,25 +207,31 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   setPhotoOutputCb(photoOutput: camera.PhotoOutput): void {
-    this.imageReceiver?.on('imageArrival', () => {
-      this.imageReceiver?.readNextImage((err: BusinessError, nextImage: image.Image) => {
-        if (err || nextImage === undefined) {
-          console.error('readNextImage failed');
-          return
+    // 设置回调之后，调用photoOutput的capture方法，就会将拍照的buffer回传到回调中
+    photoOutput.on('photoAvailable', (errCode: BusinessError, photo: camera.Photo): void => {
+      console.info('getPhoto start');
+      console.info(`err: ${JSON.stringify(errCode)}`);
+      if (errCode || photo === undefined) {
+        console.error('getPhoto failed');
+        return;
+      }
+      let imageObj = photo.main;
+      imageObj.getComponent(image.ComponentType.JPEG, (errCode: BusinessError, component: image.Component): void => {
+        console.info('getComponent start');
+        if (errCode || component === undefined) {
+          console.error('getComponent failed');
+          return;
         }
-        nextImage.getComponent(image.ComponentType.JPEG, (err: BusinessError, imageComponent: image.Component) => {
-          if (err || nextImage === undefined) {
-            console.error('getComponent failed')
-          }
-          if (imageComponent && imageComponent.byteBuffer as ArrayBuffer) {
-            this.scanRelease(imageComponent.byteBuffer)
-          } else {
-            console.error('byteBuffer is null')
-          }
-          nextImage.release()
-        })
-      })
-    })
+        let buffer: ArrayBuffer;
+        if (component.byteBuffer) {
+          buffer = component.byteBuffer;
+        } else {
+          console.error('byteBuffer is null');
+          return;
+        }
+        this.scanRelease(buffer)
+      });
+    });
   }
 
   async cameraShootingCase(): Promise<void> {
@@ -241,10 +247,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
     // 打开相机
     await cameraInput.open();
-
-    // 获取支持的模式类型
-    let sceneModes: Array<camera.SceneMode> = cameraManager.getSupportedSceneModes(cameraArray[0]);
-    let isSupportPhotoMode: boolean = sceneModes.indexOf(camera.SceneMode.NORMAL_PHOTO) >= 0;
 
     // 获取相机设备支持的输出流能力
     let cameraOutputCap: camera.CameraOutputCapability = cameraManager.getSupportedOutputCapability(cameraArray[0], camera.SceneMode.NORMAL_PHOTO);
@@ -281,9 +283,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     await this.photoSession.commitConfig();
 
     // 启动会话
-    await this.photoSession.start().then(() => {
-      console.info('Promise returned to indicate the session start success.');
-    });
+    await this.photoSession.start();
 
     setInterval(() => {
       let photoCaptureSetting: camera.PhotoCaptureSetting = {
@@ -305,8 +305,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     console.log("Flutter------buffer", imageBuffer);
     let byteImg: detectBarcode.ByteImage = {
       byteBuffer: imageBuffer,
-      width: this.cameraWidth,
-      height: this.cameraHeight,
+      width: this.cameraHeight,
+      height: this.cameraWidth,
       format: detectBarcode.ImageFormat.NV21
     };
     let options: scanBarcode.ScanOptions = {
@@ -315,14 +315,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       enableAlbum: false
     };
     detectBarcode.decodeImage(byteImg, options).then((result: detectBarcode.DetectResult) => {
-      console.log("Flutter------scanResults", result.scanResults);
-      console.log("Flutter------zoomValue", result.zoomValue);
-      console.info(TAG, 'Succeeded in getting DetectResult by promise by promise with options, result is ' + JSON.stringify(result));
       const _r: Barcode[] = result.scanResults.map(item => {
-        console.log("Flutter-------originalValue", item.originalValue)
-        console.log("Flutter-------scanType", item.scanType)
-        console.log("Flutter-------scanCodeRect", item.scanCodeRect)
-        console.log("Flutter-------cornerPoints", item.cornerPoints?.values())
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
