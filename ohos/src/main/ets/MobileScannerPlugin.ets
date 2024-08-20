@@ -30,6 +30,8 @@ import { customScan, scanBarcode, scanCore, detectBarcode } from '@kit.ScanKit';
 import EventChannel, { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventChannel';
 import { Barcode, BarcodeFormat, BarcodeType } from './Barcode';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { camera } from '@kit.CameraKit';
+import { image } from '@kit.ImageKit';
 
 const TAG: string = "mobile_scanner";
 
@@ -65,6 +67,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   private cameraWidth: number = 0;
   private cameraHeight: number = 0;
+
+  private photoSession: camera.PhotoSession | undefined = undefined;
+  private photoOutPut: camera.PhotoOutput | undefined = undefined;
+  private photoReceiver: image.ImageReceiver | undefined = undefined;
 
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
@@ -165,24 +171,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     if (!this.isStart) {
       this.isStart = true;
 
-      let scanTypes = [scanCore.ScanType.ALL]
-      if (formats) {
-        scanTypes = []
-        formats.forEach((format:number) => {
-          let type = Barcode.convertToScanType(format)
-          if (type != scanCore.ScanType.FORMAT_UNKNOWN) {
-            scanTypes.push(type)
-          }
-        })
-      }
-
-      const options: scanBarcode.ScanOptions = {
-        scanTypes: scanTypes,
-        enableMultiMode: true,
-        enableAlbum: true
-      }
-      customScan.init(options);
-
       // 设置预览流高度，默认单位：vp
       const cameraHeight: number = px2vp(cameraResolution[1])
       // 设置预览流宽度，默认单位：vp
@@ -191,7 +179,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       this.cameraWidth = cameraWidth;
       this.cameraHeight = cameraHeight;
 
-      this.startScan(cameraWidth, cameraHeight)
+      this.cameraShootingCase()
 
       result.success({
         "textureId": this.textureId,
@@ -211,6 +199,139 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       )
     }
 
+  }
+
+  async cameraShootingCase(): Promise<void> {
+    // 创建CameraManager对象
+    let cameraManager: camera.CameraManager = camera.getCameraManager(this.binding!.getApplicationContext());
+
+    // 获取相机列表
+    let cameraDevices: Array<camera.CameraDevice> = cameraManager.getSupportedCameras();
+
+    // 获取profile对象
+    let profiles: camera.CameraOutputCapability = cameraManager.getSupportedOutputCapability(cameraDevices[0], camera.SceneMode.NORMAL_PHOTO);//获取对应相机profiles
+    let previewProfiles: Array<camera.Profile> = profiles.previewProfiles;
+
+    // 预览流1
+    let previewProfilesObj: camera.Profile = previewProfiles[0]
+
+    // 创建输出对象
+    let previewOutput: camera.PreviewOutput = cameraManager.createPreviewOutput(previewProfilesObj, this.surfaceId)
+
+    // 创建cameraInput对象
+    let cameraInput: camera.CameraInput = cameraManager.createCameraInput(cameraDevices[0])
+
+    // 创建拍照方法
+    this.photoOutPut = cameraManager.createPhotoOutput(previewProfilesObj)
+
+    let size: image.Size = {
+      width: this.cameraWidth,
+      height: this.cameraHeight
+    }
+    this.photoReceiver = image.createImageReceiver(size, image.ImageFormat.JPEG, 8)
+
+    // 打开相机
+    await cameraInput.open()
+
+    // 会话流程
+    this.photoSession = cameraManager.createSession(camera.SceneMode.NORMAL_PHOTO) as camera.PhotoSession
+
+    // 开始配置会话
+    this.photoSession.beginConfig()
+
+    // 把CameraInput加入到会话
+    this.photoSession.addInput(cameraInput)
+
+    // 把 预览流1 加入到会话
+    this.photoSession.addOutput(previewOutput)
+
+    this.photoSession.addOutput(this.photoOutPut)
+
+    // 把 预览流2 加入到会话
+    // this.photoSession.addOutput(previewOutput2)
+
+    // 提交配置信息
+    await this.photoSession.commitConfig()
+
+    // 会话开始
+    await this.photoSession.start()
+
+    this.onImageArrival()
+
+    setInterval(() => {
+      let photoCaptureSetting: camera.PhotoCaptureSetting = {
+        quality: camera.QualityLevel.QUALITY_LEVEL_HIGH, // 设置图片质量高
+        rotation: camera.ImageRotation.ROTATION_0 // 设置图片旋转角度0
+      }
+      // 使用当前拍照设置进行拍照
+      this.photoOutPut!.capture(photoCaptureSetting, (err: BusinessError) => {
+        if (err) {
+          console.error(`Failed to capture the photo ${err.message}`);
+          return;
+        }
+        console.info('Callback invoked to indicate the photo capture request success.');
+      });
+    }, 3000);
+  }
+
+  onImageArrival(): void {
+    this.photoReceiver?.on('imageArrival', () => {
+      this.photoReceiver?.readNextImage((err: BusinessError, nextImage: image.Image) => {
+        if (err || nextImage === undefined) {
+          console.error('readNextImage failed')
+          return
+        } nextImage.getComponent(image.ComponentType.JPEG, (err: BusinessError, imageComponent: image.Component) => {
+          if (imageComponent && imageComponent.byteBuffer as ArrayBuffer) {
+            this.scanRelease(imageComponent.byteBuffer)
+          } else {
+            console.error('byteBuffer is null')
+          }
+          nextImage.release()
+        })
+      })
+    })
+  }
+
+  scanRelease(imageBuffer: ArrayBuffer) {
+    console.log("Flutter------buffer", imageBuffer);
+    let byteImg: detectBarcode.ByteImage = {
+      byteBuffer: imageBuffer,
+      width: this.cameraWidth,
+      height: this.cameraHeight,
+      format: detectBarcode.ImageFormat.NV21
+    };
+    let options: scanBarcode.ScanOptions = {
+      scanTypes: [scanCore.ScanType.ALL],
+      enableMultiMode: true,
+      enableAlbum: false
+    };
+    detectBarcode.decodeImage(byteImg, options).then((result: detectBarcode.DetectResult) => {
+      console.log("Flutter------scanResults", result.scanResults);
+      console.log("Flutter------zoomValue", result.zoomValue);
+      console.info(TAG, 'Succeeded in getting DetectResult by promise by promise with options, result is ' + JSON.stringify(result));
+      const _r: Barcode[] = result.scanResults.map(item => {
+        console.log("Flutter-------originalValue", item.originalValue)
+        console.log("Flutter-------scanType", item.scanType)
+        console.log("Flutter-------scanCodeRect", item.scanCodeRect)
+        console.log("Flutter-------cornerPoints", item.cornerPoints?.values())
+        return {
+          displayValue: item.originalValue,
+          rawValue: item.originalValue,
+          format: Barcode.convertScanType(item.scanType),
+          type: BarcodeType.unknown,
+          cornerPoints: item.cornerPoints
+        } as Barcode;
+      });
+      this.publishEvent({
+        "name": "barcode",
+        "data": _r,
+        "image": imageBuffer,
+        "width": this.cameraWidth,
+        "height": this.cameraHeight
+      })
+    }).catch((error: BusinessError) => {
+      console.error(TAG, `Failed to get DetectResult by promise with options. Code: ${error.code}, message: ${error.message}`);
+    })
   }
 
   startScan(cameraWidth: number, cameraHeight: number) {
@@ -237,6 +358,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     try {
       await customScan.stop();
       await customScan.release()
+      await this.photoSession?.release()
+      await this.photoOutPut?.release()
+      this.photoSession = undefined
+      this.photoOutPut = undefined
       this.isStart = false;
     } catch (e) {
     }

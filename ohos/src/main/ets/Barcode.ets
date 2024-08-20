@@ -14,6 +14,8 @@
 */
 
 import { scanCore } from '@kit.ScanKit';
+import { Point } from '@ohos.UiTest';
+
 export enum BarcodeFormat {
   /// A barcode format that represents all unknown formats.
   unknown = -1,
@@ -107,6 +109,7 @@ export class Barcode {
   rawValue: string = '';
   format: BarcodeFormat = BarcodeFormat.unknown;
   type: BarcodeType = BarcodeType.unknown;
+  cornerPoints: Array<Point> = []
 
   static convertScanType(value:scanCore.ScanType):BarcodeFormat {
     let format = BarcodeFormat.unknown
