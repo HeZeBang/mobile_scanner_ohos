@@ -29,9 +29,9 @@ import { cameraPermission, checkPermissions, requestPermissions } from './Camera
 import { customScan, scanBarcode, scanCore, detectBarcode } from '@kit.ScanKit';
 import EventChannel, { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventChannel';
 import { Barcode, BarcodeFormat, BarcodeType } from './Barcode';
-import { BusinessError } from '@kit.BasicServicesKit';
-import { camera } from '@kit.CameraKit';
-import { image } from '@kit.ImageKit';
+import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
+import { display } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const TAG: string = "mobile_scanner";
 
@@ -68,8 +68,12 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private cameraWidth: number = 0;
   private cameraHeight: number = 0;
 
-  private photoSession: camera.PhotoSession | undefined = undefined;
-  private imageReceiver: image.ImageReceiver | null = null
+  private scanWidth: number = 384 // xComponent宽度，默认设置384，单位vp
+  private scanHeight: number = 682 // xComponent高度，默认设置682，单位vp
+  private scanCodeRect: Array<scanBarcode.ScanCodeRect> = [] // 扫码结果码图位置
+  private scanBottom: number = 220
+  private displayHeight: number = 0 // 屏幕高度，单位vp
+  private displayWidth: number = 0 // 屏幕宽度，单位vp
 
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
@@ -162,13 +166,31 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     const timeout: number = call.argument("timeout") ?? 250
     const cameraResolutionValues: number[] | undefined = call.argument("cameraResolution")
     const useNewCameraSelector: boolean = call.argument("useNewCameraSelector") ?? false
-    let cameraResolution = [1080, 1920]
+    let cameraResolution = [450, 800]
     if (!!cameraResolutionValues && cameraResolutionValues.length >= 2) {
       cameraResolution = [cameraResolutionValues[0], cameraResolutionValues[1]]
     }
 
     if (!this.isStart) {
       this.isStart = true;
+
+      let scanTypes = [scanCore.ScanType.ALL]
+      if (formats) {
+        scanTypes = []
+        formats.forEach((format:number) => {
+          let type = Barcode.convertToScanType(format)
+          if (type != scanCore.ScanType.FORMAT_UNKNOWN) {
+            scanTypes.push(type)
+          }
+        })
+      }
+
+      const options: scanBarcode.ScanOptions = {
+        scanTypes: scanTypes,
+        enableMultiMode: true,
+        enableAlbum: true
+      }
+      customScan.init(options);
 
       // 设置预览流高度，默认单位：vp
       const cameraHeight: number = px2vp(cameraResolution[1])
@@ -178,13 +200,9 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       this.cameraWidth = cameraWidth;
       this.cameraHeight = cameraHeight;
 
-      this.imageReceiver = image.createImageReceiver(
-        { width: this.cameraWidth, height: this.cameraHeight},
-        image.ImageFormat.JPEG,
-        1
-      )
+      this.setDisplay()
 
-      this.cameraShootingCase()
+      this.startScan(cameraWidth, cameraHeight)
 
       result.success({
         "textureId": this.textureId,
@@ -206,134 +224,71 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   }
 
-  setPhotoOutputCb(photoOutput: camera.PhotoOutput): void {
-    // 设置回调之后，调用photoOutput的capture方法，就会将拍照的buffer回传到回调中
-    photoOutput.on('photoAvailable', (errCode: BusinessError, photo: camera.Photo): void => {
-      console.info('getPhoto start');
-      console.info(`err: ${JSON.stringify(errCode)}`);
-      if (errCode || photo === undefined) {
-        console.error('getPhoto failed');
+  // 返回自定义扫描结果的回调
+  private scanCallback: AsyncCallback<scanBarcode.ScanResult[]> =
+    async (error: BusinessError, result: scanBarcode.ScanResult[]) => {
+      if (error && error.code) {
+        hilog.error(0x0001, TAG,
+          `Failed to get ScanResult by callback. Code: ${error.code}, message: ${error.message}`);
         return;
       }
-      let imageObj = photo.main;
-      imageObj.getComponent(image.ComponentType.JPEG, (errCode: BusinessError, component: image.Component): void => {
-        console.info('getComponent start');
-        if (errCode || component === undefined) {
-          console.error('getComponent failed');
-          return;
-        }
-        let buffer: ArrayBuffer;
-        if (component.byteBuffer) {
-          buffer = component.byteBuffer;
+      // 解析码值结果跳转应用服务页
+      hilog.info(0x0001, TAG, `Succeeded in getting ScanResult by callback, result: ${JSON.stringify(result)}`);
+      let i = 0
+      let first: boolean = true
+      const _r: Barcode[] = result.map(item => {
+        if (first) {
+          first = false
         } else {
-          console.error('byteBuffer is null');
-          return;
+          i++
         }
-        this.scanRelease(buffer)
-      });
-    });
-  }
-
-  async cameraShootingCase(): Promise<void> {
-    // 创建CameraManager对象
-    let cameraManager: camera.CameraManager = camera.getCameraManager(this.binding!.getApplicationContext());
-
-    // 获取相机列表
-    let cameraArray: Array<camera.CameraDevice> = cameraManager.getSupportedCameras();
-
-    // 创建相机输入流
-    let cameraInput: camera.CameraInput | undefined = undefined;
-    cameraInput = cameraManager.createCameraInput(cameraArray[0]);
-
-    // 打开相机
-    await cameraInput.open();
-
-    // 获取相机设备支持的输出流能力
-    let cameraOutputCap: camera.CameraOutputCapability = cameraManager.getSupportedOutputCapability(cameraArray[0], camera.SceneMode.NORMAL_PHOTO);
-    let previewProfilesArray: Array<camera.Profile> = cameraOutputCap.previewProfiles;
-    let photoProfilesArray: Array<camera.Profile> = cameraOutputCap.photoProfiles;
-
-    // 创建预览输出流,其中参数 surfaceId 参考上文 XComponent 组件，预览流为XComponent组件提供的surface
-    let previewOutput: camera.PreviewOutput | undefined = undefined;
-    previewOutput = cameraManager.createPreviewOutput(previewProfilesArray[0], this.surfaceId);
-
-    // 创建拍照输出流
-    let photoOutput: camera.PhotoOutput | undefined = undefined;
-    photoOutput = cameraManager.createPhotoOutput(photoProfilesArray[0]);
-
-    //调用上面的回调函数来保存图片
-    this.setPhotoOutputCb(photoOutput);
-
-    //创建会话
-    this.photoSession = cameraManager.createSession(camera.SceneMode.NORMAL_PHOTO) as camera.PhotoSession;
-
-    // 开始配置会话
-    this.photoSession.beginConfig();
-
-    // 向会话中添加相机输入流
-    this.photoSession.addInput(cameraInput);
-
-    // 向会话中添加预览输出流
-    this.photoSession.addOutput(previewOutput);
-
-    // 向会话中添加拍照输出流
-    this.photoSession.addOutput(photoOutput);
-
-    // 提交会话配置
-    await this.photoSession.commitConfig();
-
-    // 启动会话
-    await this.photoSession.start();
-
-    setInterval(() => {
-      let photoCaptureSetting: camera.PhotoCaptureSetting = {
-        quality: camera.QualityLevel.QUALITY_LEVEL_HIGH, // 设置图片质量高
-        rotation: camera.ImageRotation.ROTATION_0 // 设置图片旋转角度0
-      }
-      // 使用当前拍照设置进行拍照
-      photoOutput!.capture(photoCaptureSetting, (err: BusinessError) => {
-        if (err) {
-          console.error(`Failed to capture the photo ${err.message}`);
-          return;
-        }
-        console.info('Callback invoked to indicate the photo capture request success.');
-      });
-    }, 3000);
-  }
-
-  scanRelease(imageBuffer: ArrayBuffer) {
-    console.log("Flutter------buffer", imageBuffer);
-    let byteImg: detectBarcode.ByteImage = {
-      byteBuffer: imageBuffer,
-      width: this.cameraHeight,
-      height: this.cameraWidth,
-      format: detectBarcode.ImageFormat.NV21
-    };
-    let options: scanBarcode.ScanOptions = {
-      scanTypes: [scanCore.ScanType.ALL],
-      enableMultiMode: true,
-      enableAlbum: false
-    };
-    detectBarcode.decodeImage(byteImg, options).then((result: detectBarcode.DetectResult) => {
-      const _r: Barcode[] = result.scanResults.map(item => {
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
-          cornerPoints: item.cornerPoints
+          cornerPoints: [
+            {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].top},
+            {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].top},
+            {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].bottom},
+            {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].bottom},
+          ]
         } as Barcode;
       });
-      this.publishEvent({
-        "name": "barcode",
-        "data": _r,
-        "image": imageBuffer,
-        "width": this.cameraWidth,
-        "height": this.cameraHeight
-      })
-    }).catch((error: BusinessError) => {
-      console.error(TAG, `Failed to get DetectResult by promise with options. Code: ${error.code}, message: ${error.message}`);
-    })
+      this.callback(_r, null, this.cameraWidth, this.cameraHeight)
+    }
+  // 返回相机帧的回调
+  private frameCallback: AsyncCallback<customScan.ScanFrame> =
+    async (error: BusinessError, frameResult: customScan.ScanFrame) => {
+      if (error) {
+        hilog.error(0x0001, TAG, `Failed to get ScanFrame by callback. Code: ${error.code}, message: ${error.message}`);
+        return;
+      }
+      if (frameResult && frameResult.scanCodeRects && frameResult.scanCodeRects.length > 0) {
+        if (frameResult.scanCodeRects[0]) {
+          this.scanCodeRect = [];
+          // 码图位置信息转换
+          this.changeToXComponent(frameResult);
+        } else {
+          hilog.error(0x0001, TAG, `Failed to get scanCodeRects by callback`);
+        }
+      }
+    }
+
+  // frameCallback横向码图位置信息转换为预览流xComponent对应码图位置信息
+  changeToXComponent(frameResult: customScan.ScanFrame) {
+    if (frameResult && frameResult.scanCodeRects) {
+      let frameHeight = frameResult.height;
+      let ratio = this.scanWidth / frameHeight;
+      frameResult.scanCodeRects.forEach((item) => {
+        this.scanCodeRect.push({
+          left: this.toFixedNumber((frameHeight - item.bottom) * ratio),
+          top: this.toFixedNumber(item.left * ratio),
+          right: this.toFixedNumber((frameHeight - item.top) * ratio),
+          bottom: this.toFixedNumber(item.right * ratio)
+        });
+      });
+    }
   }
 
   startScan(cameraWidth: number, cameraHeight: number) {
@@ -343,27 +298,44 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       surfaceId: this.surfaceId!,
     };
 
-    customScan.start(viewControl).then((r: Array<scanBarcode.ScanResult>) => {
-      const _r: Barcode[] = r.map(item => {
-        return {
-          displayValue: item.originalValue,
-          rawValue: item.originalValue,
-          format: Barcode.convertScanType(item.scanType),
-          type: BarcodeType.unknown,
-        } as Barcode;
-      });
-      this.callback(_r, null, cameraWidth, cameraHeight)
-    });
+    customScan.start(viewControl, this.scanCallback, this.frameCallback)
+
+    // customScan.start(viewControl).then((r: Array<scanBarcode.ScanResult>) => {
+    //   const _r: Barcode[] = r.map(item => {
+    //     let corners: Array<Point> = this.getCorners(item.scanCodeRect)
+    //     return {
+    //       displayValue: item.originalValue,
+    //       rawValue: item.originalValue,
+    //       format: Barcode.convertScanType(item.scanType),
+    //       type: BarcodeType.unknown,
+    //       cornerPoints: corners
+    //     } as Barcode;
+    //   });
+    //   this.callback(_r, null, cameraWidth, cameraHeight)
+    // });
+  }
+
+  // 竖屏时获取屏幕尺寸，设置预览流全屏示例
+  setDisplay() {
+    // 以手机为例计算宽高
+    let displayClass = display.getDefaultDisplaySync();
+    this.displayHeight = px2vp(displayClass.height);
+    this.displayWidth = px2vp(displayClass.width);
+    if (displayClass !== null) {
+      this.scanWidth = px2vp(displayClass.width);
+      this.scanHeight = Math.round(this.scanWidth * this.cameraWidth / this.cameraHeight);
+      this.scanBottom = Math.max(220, px2vp(displayClass.height) - this.scanHeight);
+    }
+  }
+
+  toFixedNumber(no: number): number {
+    return Number((no).toFixed(1));
   }
 
   async stop(result: MethodResult) {
     try {
       await customScan.stop();
       await customScan.release()
-      this.photoSession?.release()
-      this.imageReceiver?.release()
-      this.photoSession = undefined
-      this.imageReceiver = null
       this.isStart = false;
     } catch (e) {
     }
