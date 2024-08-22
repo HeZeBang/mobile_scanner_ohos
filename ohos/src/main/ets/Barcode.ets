@@ -109,7 +109,7 @@ export class Barcode {
   rawValue: string = '';
   format: BarcodeFormat = BarcodeFormat.unknown;
   type: BarcodeType = BarcodeType.unknown;
-  cornerPoints: Array<Point> = []
+  corners: Array<Point> = []
 
   static convertScanType(value:scanCore.ScanType):BarcodeFormat {
     let format = BarcodeFormat.unknown

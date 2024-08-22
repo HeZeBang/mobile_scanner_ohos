@@ -32,6 +32,7 @@ import { Barcode, BarcodeFormat, BarcodeType } from './Barcode';
 import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
 import { display } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { Point } from '@ohos.UiTest';
 
 const TAG: string = "mobile_scanner";
 
@@ -247,7 +248,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           rawValue: item.originalValue,
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
-          cornerPoints: [
+          corners: [
             {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].top},
             {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].top},
             {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].bottom},
@@ -302,13 +303,11 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
     // customScan.start(viewControl).then((r: Array<scanBarcode.ScanResult>) => {
     //   const _r: Barcode[] = r.map(item => {
-    //     let corners: Array<Point> = this.getCorners(item.scanCodeRect)
     //     return {
     //       displayValue: item.originalValue,
     //       rawValue: item.originalValue,
     //       format: Barcode.convertScanType(item.scanType),
     //       type: BarcodeType.unknown,
-    //       cornerPoints: corners
     //     } as Barcode;
     //   });
     //   this.callback(_r, null, cameraWidth, cameraHeight)
@@ -376,11 +375,22 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       }
 
       const barcodes: Barcode[] = scanResult.map(item => {
+        let cornerPoints = item.cornerPoints;
+        let corners: Array<Point> = []
+        if (cornerPoints != undefined && cornerPoints != null) {
+          corners = [
+            {x: this.cameraWidth - cornerPoints[0].y, y: cornerPoints[0].x},
+            {x: this.cameraWidth - cornerPoints[1].y, y: cornerPoints[1].x},
+            {x: this.cameraWidth - cornerPoints[2].y, y: cornerPoints[2].x},
+            {x: this.cameraWidth - cornerPoints[3].y, y: cornerPoints[3].x},
+          ]
+        }
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
+          corners: corners
         } as Barcode;
       });
       this.publishEvent({
