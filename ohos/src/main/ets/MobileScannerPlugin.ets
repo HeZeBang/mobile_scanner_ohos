@@ -29,7 +29,10 @@ import { cameraPermission, checkPermissions, requestPermissions } from './Camera
 import { customScan, scanBarcode, scanCore, detectBarcode } from '@kit.ScanKit';
 import EventChannel, { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventChannel';
 import { Barcode, BarcodeFormat, BarcodeType } from './Barcode';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
+import { display } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { Point } from '@ohos.UiTest';
 
 const TAG: string = "mobile_scanner";
 
@@ -65,6 +68,13 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   private cameraWidth: number = 0;
   private cameraHeight: number = 0;
+
+  private scanWidth: number = 384 // xComponent宽度，默认设置384，单位vp
+  private scanHeight: number = 682 // xComponent高度，默认设置682，单位vp
+  private scanCodeRect: Array<scanBarcode.ScanCodeRect> = [] // 扫码结果码图位置
+  private scanBottom: number = 220
+  private displayHeight: number = 0 // 屏幕高度，单位vp
+  private displayWidth: number = 0 // 屏幕宽度，单位vp
 
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
@@ -191,6 +201,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       this.cameraWidth = cameraWidth;
       this.cameraHeight = cameraHeight;
 
+      this.setDisplay()
+
       this.startScan(cameraWidth, cameraHeight)
 
       result.success({
@@ -213,6 +225,74 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   }
 
+  // 返回自定义扫描结果的回调
+  private scanCallback: AsyncCallback<scanBarcode.ScanResult[]> =
+    async (error: BusinessError, result: scanBarcode.ScanResult[]) => {
+      if (error && error.code) {
+        hilog.error(0x0001, TAG,
+          `Failed to get ScanResult by callback. Code: ${error.code}, message: ${error.message}`);
+        return;
+      }
+      // 解析码值结果跳转应用服务页
+      hilog.info(0x0001, TAG, `Succeeded in getting ScanResult by callback, result: ${JSON.stringify(result)}`);
+      let i = 0
+      let first: boolean = true
+      const _r: Barcode[] = result.map(item => {
+        if (first) {
+          first = false
+        } else {
+          i++
+        }
+        return {
+          displayValue: item.originalValue,
+          rawValue: item.originalValue,
+          format: Barcode.convertScanType(item.scanType),
+          type: BarcodeType.unknown,
+          corners: [
+            {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].top},
+            {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].top},
+            {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].bottom},
+            {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].bottom},
+          ]
+        } as Barcode;
+      });
+      this.callback(_r, null, this.cameraWidth, this.cameraHeight)
+    }
+
+  // 返回相机帧的回调
+  private frameCallback: AsyncCallback<customScan.ScanFrame> =
+    async (error: BusinessError, frameResult: customScan.ScanFrame) => {
+      if (error) {
+        hilog.error(0x0001, TAG, `Failed to get ScanFrame by callback. Code: ${error.code}, message: ${error.message}`);
+        return;
+      }
+      if (frameResult && frameResult.scanCodeRects && frameResult.scanCodeRects.length > 0) {
+        if (frameResult.scanCodeRects[0]) {
+          this.scanCodeRect = [];
+          // 码图位置信息转换
+          this.changeToXComponent(frameResult);
+        } else {
+          hilog.error(0x0001, TAG, `Failed to get scanCodeRects by callback`);
+        }
+      }
+    }
+
+  // frameCallback横向码图位置信息转换为预览流xComponent对应码图位置信息
+  changeToXComponent(frameResult: customScan.ScanFrame) {
+    if (frameResult && frameResult.scanCodeRects) {
+      let frameHeight = frameResult.height;
+      let ratio = this.scanWidth / frameHeight;
+      frameResult.scanCodeRects.forEach((item) => {
+        this.scanCodeRect.push({
+          left: this.toFixedNumber((frameHeight - item.bottom) * ratio),
+          top: this.toFixedNumber(item.left * ratio),
+          right: this.toFixedNumber((frameHeight - item.top) * ratio),
+          bottom: this.toFixedNumber(item.right * ratio)
+        });
+      });
+    }
+  }
+
   startScan(cameraWidth: number, cameraHeight: number) {
     const viewControl: customScan.ViewControl = {
       width: cameraWidth,
@@ -220,17 +300,24 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       surfaceId: this.surfaceId!,
     };
 
-    customScan.start(viewControl).then((r: Array<scanBarcode.ScanResult>) => {
-      const _r: Barcode[] = r.map(item => {
-        return {
-          displayValue: item.originalValue,
-          rawValue: item.originalValue,
-          format: Barcode.convertScanType(item.scanType),
-          type: BarcodeType.unknown,
-        } as Barcode;
-      });
-      this.callback(_r, null, cameraWidth, cameraHeight)
-    });
+    customScan.start(viewControl, this.scanCallback, this.frameCallback)
+  }
+
+  // 竖屏时获取屏幕尺寸，设置预览流全屏示例
+  setDisplay() {
+    // 以手机为例计算宽高
+    let displayClass = display.getDefaultDisplaySync();
+    this.displayHeight = px2vp(displayClass.height);
+    this.displayWidth = px2vp(displayClass.width);
+    if (displayClass !== null) {
+      this.scanWidth = px2vp(displayClass.width);
+      this.scanHeight = Math.round(this.scanWidth * this.cameraWidth / this.cameraHeight);
+      this.scanBottom = Math.max(220, px2vp(displayClass.height) - this.scanHeight);
+    }
+  }
+
+  toFixedNumber(no: number): number {
+    return Number((no).toFixed(1));
   }
 
   async stop(result: MethodResult) {
@@ -277,11 +364,22 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       }
 
       const barcodes: Barcode[] = scanResult.map(item => {
+        let cornerPoints = item.cornerPoints;
+        let corners: Array<Point> = []
+        if (cornerPoints != undefined && cornerPoints != null) {
+          corners = [
+            {x: this.cameraWidth - cornerPoints[0].y, y: cornerPoints[0].x},
+            {x: this.cameraWidth - cornerPoints[1].y, y: cornerPoints[1].x},
+            {x: this.cameraWidth - cornerPoints[2].y, y: cornerPoints[2].x},
+            {x: this.cameraWidth - cornerPoints[3].y, y: cornerPoints[3].x},
+          ]
+        }
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
+          corners: corners
         } as Barcode;
       });
       this.publishEvent({
@@ -334,4 +432,3 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     })
   }
 }
-
