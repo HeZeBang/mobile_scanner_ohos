@@ -167,7 +167,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     const timeout: number = call.argument("timeout") ?? 250
     const cameraResolutionValues: number[] | undefined = call.argument("cameraResolution")
     const useNewCameraSelector: boolean = call.argument("useNewCameraSelector") ?? false
-    let cameraResolution = [450, 800]
+    let cameraResolution = [360, 360]
     if (!!cameraResolutionValues && cameraResolutionValues.length >= 2) {
       cameraResolution = [cameraResolutionValues[0], cameraResolutionValues[1]]
     }
