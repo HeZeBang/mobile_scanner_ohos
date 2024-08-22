@@ -258,6 +258,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       });
       this.callback(_r, null, this.cameraWidth, this.cameraHeight)
     }
+
   // 返回相机帧的回调
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
     async (error: BusinessError, frameResult: customScan.ScanFrame) => {
@@ -300,18 +301,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     };
 
     customScan.start(viewControl, this.scanCallback, this.frameCallback)
-
-    // customScan.start(viewControl).then((r: Array<scanBarcode.ScanResult>) => {
-    //   const _r: Barcode[] = r.map(item => {
-    //     return {
-    //       displayValue: item.originalValue,
-    //       rawValue: item.originalValue,
-    //       format: Barcode.convertScanType(item.scanType),
-    //       type: BarcodeType.unknown,
-    //     } as Barcode;
-    //   });
-    //   this.callback(_r, null, cameraWidth, cameraHeight)
-    // });
   }
 
   // 竖屏时获取屏幕尺寸，设置预览流全屏示例
