@@ -249,10 +249,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
           corners: [
-            {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].top},
-            {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].top},
-            {x: this.scanCodeRect[i].left, y: this.scanCodeRect[i].bottom},
-            {x: this.scanCodeRect[i].right, y: this.scanCodeRect[i].bottom},
+            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.top},
+            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.top},
+            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.bottom},
+            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.bottom},
           ]
         } as Barcode;
       });
