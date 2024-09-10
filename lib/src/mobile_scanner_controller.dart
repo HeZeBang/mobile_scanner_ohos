@@ -164,7 +164,7 @@ class MobileScannerController {
     } */
 
     if (formats != null) {
-      if (kIsWeb || Platform.isIOS || Platform.isMacOS || Platform.isAndroid) {
+      if (kIsWeb || Platform.isIOS || Platform.isMacOS || Platform.isAndroid || defaultTargetPlatform == TargetPlatform.ohos) {
         arguments['formats'] = formats!.map((e) => e.rawValue).toList();
       }
     }
