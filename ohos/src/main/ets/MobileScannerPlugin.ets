@@ -76,6 +76,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private displayHeight: number = 0 // 屏幕高度，单位vp
   private displayWidth: number = 0 // 屏幕宽度，单位vp
 
+  private scanWindow: Array<number> | null = null;  // scanWindow，扫描区域
+
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
   }
@@ -255,6 +257,13 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
             {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.bottom},
           ]
         } as Barcode;
+      }).filter(barcode => {
+        if (this.scanWindow) {
+          return this.isBarcodeInScanWindow(barcode);
+        }
+        else {
+          return true;
+        }
       });
       this.callback(_r, null, this.cameraWidth, this.cameraHeight)
     }
@@ -400,7 +409,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   updateScanWindow(call: MethodCall, result: MethodResult) {
-    result.notImplemented()
+    this.scanWindow = call.argument("rect")
+    result.success(true)
   }
 
   callback(barcodes: Barcode[], image: ByteBuffer | null, width: number, height: number) {
@@ -423,6 +433,15 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         })
       }
     })
+  }
+
+  private isBarcodeInScanWindow(barcode: Barcode): boolean {
+    const corners = barcode.corners;
+    const top = this.scanWindow![1] * this.scanHeight;
+    const bottom = this.scanWindow![3] * this.scanHeight;
+    const left = this.scanWindow![0] * this.scanWidth;
+    const right = this.scanWindow![2] * this.scanWidth;
+    return corners.reduce((r, item) => r && item.x > left && item.x < right && item.y > top && item.y < bottom, true)
   }
 
   errorCallback(error: string) {
