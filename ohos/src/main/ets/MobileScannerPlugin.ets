@@ -33,6 +33,8 @@ import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
 import { display } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Point } from '@ohos.UiTest';
+import { hasFlashUnit, getCameraManager} from './CameraUtil';
+import { image } from '@kit.ImageKit';
 
 const TAG: string = "mobile_scanner";
 
@@ -174,6 +176,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
     if (!this.isStart) {
       this.isStart = true;
+      let torchable:boolean = hasFlashUnit(this.applicationContext!)
 
       let scanTypes = [scanCore.ScanType.ALL]
       if (formats) {
@@ -204,6 +207,17 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       this.setDisplay()
 
       this.startScan(cameraWidth, cameraHeight)
+      //customScan.on('lightingFlash', this.torchCallback);
+
+      if (torch) {
+        customScan.openFlashLight()
+      } else {
+        customScan.closeFlashLight()
+      }
+      this.publishEvent({
+        name: 'torchState',
+        data: customScan.getFlashLightStatus() ? TorchState.on : TorchState.off
+      });
 
       result.success({
         "textureId": this.textureId,
@@ -211,7 +225,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           "width": cameraWidth,
           "height": cameraHeight
         },
-        "torchable": torch,
+        "torchable": torchable,
         "numberOfCameras": 1
       });
 
@@ -222,7 +236,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         null
       )
     }
-
   }
 
   // 返回自定义扫描结果的回调
@@ -430,5 +443,17 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       "name": "error",
       "data": error
     })
+  }
+
+  torchCallback(error: BusinessError, bool: boolean) {
+    if (error) {
+      Log.e(TAG, `Failed to cancel Flash by callback. Code: ${error.code}, message: ${error.message}`);
+      return;
+    }
+
+    this.publishEvent({
+      name: 'torchState',
+      data: customScan.getFlashLightStatus() ? TorchState.on : TorchState.off
+    });
   }
 }
