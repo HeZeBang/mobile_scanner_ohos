@@ -251,11 +251,14 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
           corners: [
-            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.top},
-            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.top},
-            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.bottom},
-            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.bottom},
-          ]
+            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.top} as Point,
+            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.top} as Point,
+            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.bottom} as Point,
+            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.bottom} as Point,
+          ].map(i => ({
+            x: i.x / this.scanWidth * this.cameraWidth,
+            y: i.y / this.scanHeight * this.cameraHeight
+          }) as Point)
         } as Barcode;
       }).filter(barcode => {
         if (this.scanWindow) {
@@ -437,10 +440,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   private isBarcodeInScanWindow(barcode: Barcode): boolean {
     const corners = barcode.corners;
-    const top = this.scanWindow![1] * this.scanHeight;
-    const bottom = this.scanWindow![3] * this.scanHeight;
-    const left = this.scanWindow![0] * this.scanWidth;
-    const right = this.scanWindow![2] * this.scanWidth;
+    const top = this.scanWindow![1] * this.cameraHeight;
+    const bottom = this.scanWindow![3] * this.cameraHeight;
+    const left = this.scanWindow![0] * this.cameraWidth;
+    const right = this.scanWindow![2] * this.cameraWidth;
     return corners.reduce((r, item) => r && item.x > left && item.x < right && item.y > top && item.y < bottom, true)
   }
 
