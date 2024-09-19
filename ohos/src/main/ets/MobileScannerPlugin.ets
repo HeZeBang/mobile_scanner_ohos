@@ -80,6 +80,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   private scanWindow: Array<number> | null = null;  // scanWindow，扫描区域
 
+  private imageBuffer: ArrayBuffer | null = null;
+
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
   }
@@ -281,7 +283,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           return true;
         }
       });
-      this.callback(_r, null, this.cameraWidth, this.cameraHeight)
+      this.callback(_r, this.imageBuffer, this.cameraWidth, this.cameraHeight)
     }
 
   // 返回相机帧的回调
@@ -292,6 +294,18 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         return;
       }
       if (frameResult && frameResult.scanCodeRects && frameResult.scanCodeRects.length > 0) {
+        let sourcePotions: image.SourceOptions = {
+          sourceDensity: 120,
+          sourcePixelFormat: image.PixelMapFormat.NV21,
+          sourceSize: { height: this.cameraHeight, width: this.cameraWidth}
+        }
+        let imageResource = image.createImageSource(frameResult.byteBuffer, sourcePotions)
+        let packer = image.createImagePacker()
+        let packingOpt: image.PackingOption = { format: "image/jpeg", quality: 100 }
+        packer.packing(imageResource, packingOpt).then((imgBuffer: ArrayBuffer) => {
+          this.imageBuffer = imgBuffer;
+          console.log(TAG, "get imageBuffer success!")
+        })
         if (frameResult.scanCodeRects[0]) {
           this.scanCodeRect = [];
           // 码图位置信息转换
@@ -429,16 +443,14 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     result.success(true)
   }
 
-  callback(barcodes: Barcode[], image: ByteBuffer | null, width: number, height: number) {
+  callback(barcodes: Barcode[], image: ArrayBuffer | null, width: number, height: number) {
     // 需要先暂停后才能继续识别
     customScan.stop().then(() => {
-      // 连续识别
-      this.startScan(this.cameraWidth, this.cameraHeight)
       if (image) {
         this.publishEvent({
           "name": "barcode",
           "data": barcodes,
-          "image": image,
+          "image": new Uint8Array(image),
           "width": width,
           "height": height
         })
@@ -448,6 +460,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           "data": barcodes
         })
       }
+      // 连续识别
+      this.startScan(this.cameraWidth, this.cameraHeight)
     })
   }
 
