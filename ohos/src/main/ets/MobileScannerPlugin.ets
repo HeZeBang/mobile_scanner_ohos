@@ -33,7 +33,7 @@ import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
 import { display } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Point } from '@ohos.UiTest';
-import { hasFlashUnit, getCameraManager} from './CameraUtil';
+import { hasFlashUnit, getCameraManager } from './CameraUtil';
 import { image } from '@kit.ImageKit';
 
 const TAG: string = "mobile_scanner";
@@ -67,10 +67,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private surfaceId: string | null = null;
   private binding: FlutterPluginBinding | null = null;
   private isStart = false;
-
   private cameraWidth: number = 0;
   private cameraHeight: number = 0;
-
   private scanWidth: number = 384 // xComponent宽度，默认设置384，单位vp
   private scanHeight: number = 682 // xComponent高度，默认设置682，单位vp
   private scanCodeRect: Array<scanBarcode.ScanCodeRect> = [] // 扫码结果码图位置
@@ -78,7 +76,9 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private displayHeight: number = 0 // 屏幕高度，单位vp
   private displayWidth: number = 0 // 屏幕宽度，单位vp
 
-  private scanWindow: Array<number> | null = null;  // scanWindow，扫描区域
+  private scanWindow: Array<number> | null = null; // scanWindow，扫描区域
+
+  private imageBuffer: Uint8Array | null = null;
 
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
@@ -88,7 +88,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     this.binding = binding;
 
     this.applicationContext = binding.getApplicationContext();
-    this.methodChannel = new MethodChannel(binding.getBinaryMessenger(), "dev.steenbakker.mobile_scanner/scanner/method");
+    this.methodChannel =
+      new MethodChannel(binding.getBinaryMessenger(), "dev.steenbakker.mobile_scanner/scanner/method");
     this.methodChannel.setMethodCallHandler(this);
 
     this.eventChannel = new EventChannel(binding.getBinaryMessenger(), "dev.steenbakker.mobile_scanner/scanner/event");
@@ -178,12 +179,12 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
     if (!this.isStart) {
       this.isStart = true;
-      let torchable:boolean = hasFlashUnit(this.applicationContext!)
+      let torchable: boolean = hasFlashUnit(this.applicationContext!)
 
       let scanTypes = [scanCore.ScanType.ALL]
       if (formats) {
         scanTypes = []
-        formats.forEach((format:number) => {
+        formats.forEach((format: number) => {
           let type = Barcode.convertToScanType(format)
           if (type != scanCore.ScanType.FORMAT_UNKNOWN) {
             scanTypes.push(type)
@@ -208,7 +209,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
       this.setDisplay()
 
-      this.startScan(cameraWidth, cameraHeight)
+      this.startScan()
       //customScan.on('lightingFlash', this.torchCallback);
 
       if (torch) {
@@ -264,10 +265,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
           corners: [
-            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.top} as Point,
-            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.top} as Point,
-            {x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.bottom} as Point,
-            {x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.bottom} as Point,
+            { x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.top } as Point,
+            { x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.top } as Point,
+            { x: this.scanCodeRect[i]?.right, y: this.scanCodeRect[i]?.bottom } as Point,
+            { x: this.scanCodeRect[i]?.left, y: this.scanCodeRect[i]?.bottom } as Point,
           ].map(i => ({
             x: i.x / this.scanWidth * this.cameraWidth,
             y: i.y / this.scanHeight * this.cameraHeight
@@ -276,14 +277,12 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       }).filter(barcode => {
         if (this.scanWindow) {
           return this.isBarcodeInScanWindow(barcode);
-        }
-        else {
+        } else {
           return true;
         }
       });
-      this.callback(_r, null, this.cameraWidth, this.cameraHeight)
+      this.callback(_r, this.imageBuffer, this.cameraWidth, this.cameraHeight)
     }
-
   // 返回相机帧的回调
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
     async (error: BusinessError, frameResult: customScan.ScanFrame) => {
@@ -292,6 +291,23 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         return;
       }
       if (frameResult && frameResult.scanCodeRects && frameResult.scanCodeRects.length > 0) {
+        let sourcePotions: image.SourceOptions = {
+          sourceDensity: 120,
+          sourcePixelFormat: image.PixelMapFormat.NV21,
+          sourceSize: { height: 960, width: 1280 }
+        }
+        let imageResource = image.createImageSource(frameResult.byteBuffer, sourcePotions)
+        let opts: image.InitializationOptions = {
+          editable: true,
+          pixelFormat: 3,
+          size: { height: 960, width: 1280 }
+        }
+        let pixelMap: image.PixelMap = await imageResource.createPixelMap(opts)
+        let packer: image.ImagePacker = image.createImagePacker()
+        let packingOpt: image.PackingOption = { format: "image/jpeg", quality: 100 }
+        let imgBuffer = await packer.packing(pixelMap, packingOpt);
+        this.imageBuffer = new Uint8Array(imgBuffer)
+
         if (frameResult.scanCodeRects[0]) {
           this.scanCodeRect = [];
           // 码图位置信息转换
@@ -318,10 +334,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     }
   }
 
-  startScan(cameraWidth: number, cameraHeight: number) {
+  startScan() {
     const viewControl: customScan.ViewControl = {
-      width: cameraWidth,
-      height: cameraHeight,
+      width: 1280,
+      height: 960,
       surfaceId: this.surfaceId!,
     };
 
@@ -382,7 +398,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         Log.e(TAG, "analyzeImage:Callback Error:" + JSON.stringify(error));
         return
       }
-      Log.d(TAG,  "analyzeImage:Callback scan result:" + JSON.stringify(scanResult));
+      Log.d(TAG, "analyzeImage:Callback scan result:" + JSON.stringify(scanResult));
       if (scanResult.length == 0) {
         result.success(false)
         return
@@ -393,10 +409,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         let corners: Array<Point> = []
         if (cornerPoints != undefined && cornerPoints != null) {
           corners = [
-            {x: this.cameraWidth - cornerPoints[0].y, y: cornerPoints[0].x},
-            {x: this.cameraWidth - cornerPoints[1].y, y: cornerPoints[1].x},
-            {x: this.cameraWidth - cornerPoints[2].y, y: cornerPoints[2].x},
-            {x: this.cameraWidth - cornerPoints[3].y, y: cornerPoints[3].x},
+            { x: this.cameraWidth - cornerPoints[0].y, y: cornerPoints[0].x },
+            { x: this.cameraWidth - cornerPoints[1].y, y: cornerPoints[1].x },
+            { x: this.cameraWidth - cornerPoints[2].y, y: cornerPoints[2].x },
+            { x: this.cameraWidth - cornerPoints[3].y, y: cornerPoints[3].x },
           ]
         }
         return {
@@ -429,11 +445,9 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     result.success(true)
   }
 
-  callback(barcodes: Barcode[], image: ByteBuffer | null, width: number, height: number) {
+  callback(barcodes: Barcode[], image: Uint8Array | null, width: number, height: number) {
     // 需要先暂停后才能继续识别
     customScan.stop().then(() => {
-      // 连续识别
-      this.startScan(this.cameraWidth, this.cameraHeight)
       if (image) {
         this.publishEvent({
           "name": "barcode",
@@ -448,6 +462,10 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           "data": barcodes
         })
       }
+      // 连续识别
+      setTimeout(() => {
+        this.startScan()
+      }, 1000)
     })
   }
 
