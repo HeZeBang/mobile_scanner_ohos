@@ -282,6 +282,9 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         }
       });
       this.callback(_r, this.imageBuffer, this.cameraWidth, this.cameraHeight)
+      setTimeout(() => {
+        customScan.rescan();
+      }, 1000)
     }
   // 返回相机帧的回调
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
@@ -446,27 +449,20 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   callback(barcodes: Barcode[], image: Uint8Array | null, width: number, height: number) {
-    // 需要先暂停后才能继续识别
-    customScan.stop().then(() => {
-      if (image) {
-        this.publishEvent({
-          "name": "barcode",
-          "data": barcodes,
-          "image": image,
-          "width": width,
-          "height": height
-        })
-      } else {
-        this.publishEvent({
-          "name": "barcode",
-          "data": barcodes
-        })
-      }
-      // 连续识别
-      setTimeout(() => {
-        this.startScan()
-      }, 1000)
-    })
+    if (image) {
+      this.publishEvent({
+        "name": "barcode",
+        "data": barcodes,
+        "image": image,
+        "width": width,
+        "height": height
+      })
+    } else {
+      this.publishEvent({
+        "name": "barcode",
+        "data": barcodes
+      })
+    }
   }
 
   private isBarcodeInScanWindow(barcode: Barcode): boolean {
