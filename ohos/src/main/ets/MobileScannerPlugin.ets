@@ -118,6 +118,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     this.eventChannel?.setStreamHandler(null);
     this.eventChannel = null;
 
+    this.isStart = false;
+
     // unregisterTexture
     binding.getTextureRegistry().unregisterTexture(this.textureId);
   }
@@ -283,7 +285,9 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       });
       this.callback(_r, this.imageBuffer, this.cameraWidth, this.cameraHeight)
       setTimeout(() => {
-        customScan.rescan();
+        if (this.isStart) {
+          customScan.rescan();
+        }
       }, 1000)
     }
   // 返回相机帧的回调
