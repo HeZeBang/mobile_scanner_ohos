@@ -118,6 +118,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     this.eventChannel?.setStreamHandler(null);
     this.eventChannel = null;
 
+    this.isStart = false;
+
     // unregisterTexture
     binding.getTextureRegistry().unregisterTexture(this.textureId);
   }
