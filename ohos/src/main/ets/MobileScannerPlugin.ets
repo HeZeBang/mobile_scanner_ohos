@@ -288,7 +288,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         if (this.isStart) {
           customScan.rescan();
         }
-      }, 1000)
+      }, 250)
     }
   // 返回相机帧的回调
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
