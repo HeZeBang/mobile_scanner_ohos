@@ -288,7 +288,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         if (this.isStart) {
           customScan.rescan();
         }
-      }, 1000)
+      }, 250)
     }
   // 返回相机帧的回调
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
@@ -369,11 +369,15 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   async stop(result: MethodResult) {
-    try {
-      await customScan.stop();
-      await customScan.release()
+    if (this.isStart) {
       this.isStart = false;
-    } catch (e) {
+      try {
+        await customScan.stop();
+        await customScan.release()
+      } catch (e) {
+        Log.e(TAG, "customScan Stop Error:" + JSON.stringify(error));
+        this.isStart = true;
+      }
     }
     result.success(null)
   }
