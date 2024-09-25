@@ -369,11 +369,15 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   async stop(result: MethodResult) {
-    try {
-      await customScan.stop();
-      await customScan.release()
+    if (this.isStart) {
       this.isStart = false;
-    } catch (e) {
+      try {
+        await customScan.stop();
+        await customScan.release()
+      } catch (e) {
+        Log.e(TAG, "customScan Stop Error:" + JSON.stringify(error));
+        this.isStart = true;
+      }
     }
     result.success(null)
   }
