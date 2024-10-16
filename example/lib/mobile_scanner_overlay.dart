@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:mobile_scanner_example/scanner_error_widget.dart';
@@ -140,11 +141,15 @@ class _BarcodeScannerWithOverlayState extends State<BarcodeScannerWithOverlay> {
                                     );
                                   },
                                 ),
-                                IconButton(
-                                  onPressed: () => controller.switchCamera(),
-                                  icon: const Icon(
-                                    Icons.cameraswitch_rounded,
-                                    color: Colors.white,
+                                Visibility(
+                                  visible: defaultTargetPlatform !=
+                                      TargetPlatform.ohos,
+                                  child: IconButton(
+                                    onPressed: () => controller.switchCamera(),
+                                    icon: const Icon(
+                                      Icons.cameraswitch_rounded,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ],

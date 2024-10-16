@@ -394,13 +394,24 @@ class MobileScannerController {
   /// [zoomScale] must be within 0.0 and 1.0, where 1.0 is the max zoom, and 0.0
   /// is zoomed out.
   Future<void> setZoomScale(double zoomScale) async {
-    if (zoomScale < 0 || zoomScale > 1) {
-      throw const MobileScannerException(
-        errorCode: MobileScannerErrorCode.genericError,
-        errorDetails: MobileScannerErrorDetails(
-          message: 'The zoomScale must be between 0 and 1.',
-        ),
-      );
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      if (zoomScale < 0 || zoomScale > 10) {
+        throw const MobileScannerException(
+          errorCode: MobileScannerErrorCode.genericError,
+          errorDetails: MobileScannerErrorDetails(
+            message: 'The zoomScale must be between 0 and 10.',
+          ),
+        );
+      }
+    } else {
+      if (zoomScale < 0 || zoomScale > 1) {
+        throw const MobileScannerException(
+          errorCode: MobileScannerErrorCode.genericError,
+          errorDetails: MobileScannerErrorDetails(
+            message: 'The zoomScale must be between 0 and 1.',
+          ),
+        );
+      }
     }
     await _methodChannel.invokeMethod('setScale', zoomScale);
   }
