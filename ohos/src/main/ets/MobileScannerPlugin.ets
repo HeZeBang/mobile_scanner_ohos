@@ -31,12 +31,12 @@ import EventChannel, { EventSink } from '@ohos/flutter_ohos/src/main/ets/plugin/
 import { Barcode, BarcodeFormat, BarcodeType } from './Barcode';
 import { AsyncCallback, BusinessError } from '@kit.BasicServicesKit';
 import { display } from '@kit.ArkUI';
-import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Point } from '@ohos.UiTest';
 import { hasFlashUnit, getCameraManager } from './CameraUtil';
 import { image } from '@kit.ImageKit';
+import { JSON } from '@kit.ArkTS';
 
-const TAG: string = "mobile_scanner";
+const TAG: string = "MobileScannerPlugin";
 
 enum TorchState {
   off = 0,
@@ -133,8 +133,9 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           } else {
             result.success(2)
           }
+        }).catch((error: BusinessError) => {
+          result.error(String(error.code), error.message, null);
         });
-        result.notImplemented()
       } else if (call.method === "request") {
         requestPermissions(this.ability!.context, (err, msg) => {
           if (err) {
@@ -174,7 +175,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     const timeout: number = call.argument("timeout") ?? 250
     const cameraResolutionValues: number[] | undefined = call.argument("cameraResolution")
     const useNewCameraSelector: boolean = call.argument("useNewCameraSelector") ?? false
-    let cameraResolution = [360, 360]
+    let cameraResolution = [360.5, 360.5] // 确保返回到dart的数字是 double 类型
     if (!!cameraResolutionValues && cameraResolutionValues.length >= 2) {
       cameraResolution = [cameraResolutionValues[0], cameraResolutionValues[1]]
     }
@@ -224,6 +225,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         data: customScan.getFlashLightStatus() ? TorchState.on : TorchState.off
       });
 
+      // dart 中接收的 width 和 height 会转换为 double 类型，返回整数会导致异常
       result.success({
         "textureId": this.textureId,
         "size": {
@@ -247,12 +249,11 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private scanCallback: AsyncCallback<scanBarcode.ScanResult[]> =
     async (error: BusinessError, result: scanBarcode.ScanResult[]) => {
       if (error && error.code) {
-        hilog.error(0x0001, TAG,
-          `Failed to get ScanResult by callback. Code: ${error.code}, message: ${error.message}`);
+        Log.e(TAG, `Failed to get ScanResult by callback. Code: ${error.code}, message: ${error.message}`);
         return;
       }
       // 解析码值结果跳转应用服务页
-      hilog.info(0x0001, TAG, `Succeeded in getting ScanResult by callback, result: ${JSON.stringify(result)}`);
+      Log.i(TAG, `Succeeded in getting ScanResult by callback, result: ${JSON.stringify(result)}`);
       let i = 0
       let first: boolean = true
       const _r: Barcode[] = result.map(item => {
@@ -294,20 +295,20 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
     async (error: BusinessError, frameResult: customScan.ScanFrame) => {
       if (error) {
-        hilog.error(0x0001, TAG, `Failed to get ScanFrame by callback. Code: ${error.code}, message: ${error.message}`);
+        Log.e(TAG, `Failed to get ScanFrame by callback. Code: ${error.code}, message: ${error.message}`);
         return;
       }
       if (frameResult && frameResult.scanCodeRects && frameResult.scanCodeRects.length > 0) {
         let sourcePotions: image.SourceOptions = {
           sourceDensity: 120,
           sourcePixelFormat: image.PixelMapFormat.NV21,
-          sourceSize: { height: 960, width: 1280 }
+          sourceSize: { height: this.scanHeight, width: this.scanWidth }
         }
         let imageResource = image.createImageSource(frameResult.byteBuffer, sourcePotions)
         let opts: image.InitializationOptions = {
           editable: true,
           pixelFormat: 3,
-          size: { height: 960, width: 1280 }
+          size: { height: this.scanHeight, width: this.scanHeight }
         }
         let pixelMap: image.PixelMap = await imageResource.createPixelMap(opts)
         let packer: image.ImagePacker = image.createImagePacker()
@@ -320,7 +321,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
           // 码图位置信息转换
           this.changeToXComponent(frameResult);
         } else {
-          hilog.error(0x0001, TAG, `Failed to get scanCodeRects by callback`);
+          Log.e(TAG, `Failed to get scanCodeRects by callback`);
         }
       }
     }
@@ -343,8 +344,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   startScan() {
     const viewControl: customScan.ViewControl = {
-      width: 1280,
-      height: 960,
+      width: this.scanWidth,
+      height: this.scanHeight,
       surfaceId: this.surfaceId!,
     };
 
