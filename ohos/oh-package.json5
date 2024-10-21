@@ -2,10 +2,10 @@
   "name": "mobile_scanner",
   "version": "1.0.0",
   "description": "Please describe the basic information.",
-  "main": "",
+  "main": "index.ets",
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ohos/flutter_ohos": "file:har/flutter.har"
+    "@ohos/flutter_ohos": "file:libs/flutter.har"
   }
 }
