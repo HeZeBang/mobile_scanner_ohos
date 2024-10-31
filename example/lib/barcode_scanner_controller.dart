@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -140,23 +141,26 @@ class _BarcodeScannerWithControllerState
                           ),
                         ),
                       ),
-                      IconButton(
-                        color: Colors.white,
-                        icon: ValueListenableBuilder<CameraFacing>(
-                          valueListenable: controller.cameraFacingState,
-                          builder: (context, state, child) {
-                            switch (state) {
-                              case CameraFacing.front:
-                                return const Icon(Icons.camera_front);
-                              case CameraFacing.back:
-                                return const Icon(Icons.camera_rear);
-                            }
-                          },
+                      Visibility(
+                        visible: defaultTargetPlatform != TargetPlatform.ohos,
+                        child: IconButton(
+                          color: Colors.white,
+                          icon: ValueListenableBuilder<CameraFacing>(
+                            valueListenable: controller.cameraFacingState,
+                            builder: (context, state, child) {
+                              switch (state) {
+                                case CameraFacing.front:
+                                  return const Icon(Icons.camera_front);
+                                case CameraFacing.back:
+                                  return const Icon(Icons.camera_rear);
+                              }
+                            },
+                          ),
+                          iconSize: 32.0,
+                          onPressed: (numberOfCameras ?? 0) < 2
+                              ? null
+                              : () => controller.switchCamera(),
                         ),
-                        iconSize: 32.0,
-                        onPressed: (numberOfCameras ?? 0) < 2
-                            ? null
-                            : () => controller.switchCamera(),
                       ),
                       IconButton(
                         color: Colors.white,
