@@ -35,6 +35,7 @@ import { Point } from '@ohos.UiTest';
 import { hasFlashUnit, getCameraManager } from './CameraUtil';
 import { image } from '@kit.ImageKit';
 import { JSON } from '@kit.ArkTS';
+import { camera } from '@kit.CameraKit';
 
 const TAG: string = "MobileScannerPlugin";
 
@@ -276,23 +277,28 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       }
       if (frameResult && frameResult.scanCodeRects && frameResult.scanCodeRects.length > 0) {
         try {
+          const EventWidth = frameResult.width;
+          const EventHeight = frameResult.height;
+
           let sourcePotions: image.SourceOptions = {
             sourceDensity: 120,
             sourcePixelFormat: image.PixelMapFormat.NV21,
-            sourceSize: { height: this.scanHeight, width: this.scanWidth }
+            sourceSize: { height: EventHeight, width: EventWidth }
           }
           let imageResource = image.createImageSource(frameResult.byteBuffer, sourcePotions)
           let opts: image.InitializationOptions = {
             editable: true,
-            pixelFormat: 3,
-            size: { height: this.scanHeight, width: this.scanHeight }
+            pixelFormat: image.PixelMapFormat.RGBA_8888,
+            size: { height: EventHeight, width: EventWidth }
           }
           let pixelMap: image.PixelMap = await imageResource.createPixelMap(opts)
+          // 修正相机预览流方向
+          pixelMap.rotateSync(camera.ImageRotation.ROTATION_90)
           let packer: image.ImagePacker = image.createImagePacker()
           let packingOpt: image.PackingOption = { format: "image/jpeg", quality: 100 }
           let imgBuffer = await packer.packing(pixelMap, packingOpt);
           this.imageBuffer = new Uint8Array(imgBuffer)
-        } catch(e) {
+        } catch (e) {
           Log.e(TAG, `Failed to create imageBuffer`);
         }
         this.scanCodeRect = [];
