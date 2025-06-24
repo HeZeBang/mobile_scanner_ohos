@@ -134,6 +134,7 @@ flutter pub get
 
 ## 5. 遗留问题
 
+- [ ] 自定义二维码扫描无法切换到前置摄像头: [issue#57](https://gitcode.com/openharmony-sig/fluttertpc_mobile_scanner/issues/57)
 
 ## 6. 其他
 
