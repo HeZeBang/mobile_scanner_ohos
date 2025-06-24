@@ -38,7 +38,7 @@ flutter pub get
 
 ### 1.2 使用案例
 
-使用案例详见 [ohos/example](/example/lib/main.dart)
+使用案例详见 [example](/example/lib/main.dart)
 
 
 ## 2. 约束与限制

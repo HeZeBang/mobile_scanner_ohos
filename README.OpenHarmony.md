@@ -38,7 +38,7 @@ flutter pub get
 
 ### 1.2 Usage
 
-For use cases [ohos/example](/example/lib/main.dart)
+For use cases [example](/example/lib/main.dart)
 
 
 ## 2. Constraints
