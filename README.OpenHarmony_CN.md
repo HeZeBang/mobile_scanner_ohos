@@ -38,7 +38,7 @@ flutter pub get
 
 ### 1.2 使用案例
 
-使用案例详见 [ohos/example](/example/lib/main.dart)
+使用案例详见 [example](/example/lib/main.dart)
 
 
 ## 2. 约束与限制
@@ -134,6 +134,7 @@ flutter pub get
 
 ## 5. 遗留问题
 
+- [ ] 自定义二维码扫描无法切换到前置摄像头: [issue#57](https://gitcode.com/openharmony-sig/fluttertpc_mobile_scanner/issues/57)
 
 ## 6. 其他
 

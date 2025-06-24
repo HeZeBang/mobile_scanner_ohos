@@ -38,7 +38,7 @@ flutter pub get
 
 ### 1.2 Usage
 
-For use cases [ohos/example](/example/lib/main.dart)
+For use cases [example](/example/lib/main.dart)
 
 
 ## 2. Constraints
@@ -134,6 +134,7 @@ Open  `entry/src/main/resources/base/element/string.json` and add the following 
 
 ## 5. Known Issues
 
+- [ ] Custom QR code scanning cannot switch to the front camera: [issue#57](https://gitcode.com/openharmony-sig/fluttertpc_mobile_scanner/issues/57)
 
 ## 6. Others
 
