@@ -110,6 +110,7 @@ export class Barcode {
   format: BarcodeFormat = BarcodeFormat.unknown;
   type: BarcodeType = BarcodeType.unknown;
   corners: Array<Point> = []
+  size?:ESObject
 
   static convertScanType(value:scanCore.ScanType):BarcodeFormat {
     let format = BarcodeFormat.unknown

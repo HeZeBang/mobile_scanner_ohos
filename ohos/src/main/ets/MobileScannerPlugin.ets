@@ -83,6 +83,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   private scanWindow: Array<number> | null = null; // scanWindow，扫描区域
   private imageBuffer: Uint8Array | null = null;
+  private isPaused:boolean = false
 
   publishEvent(event: ESObject) {
     this.eventSink?.success(event)
@@ -156,6 +157,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         this.resetScale(result)
       } else if (call.method === "updateScanWindow") {
         this.updateScanWindow(call, result)
+      }  else if (call.method === "pause") {
+        this.pause(call, result)
       } else {
         result.notImplemented()
       }
@@ -244,6 +247,11 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       }
       // 解析码值结果跳转应用服务页
       const _r: Barcode[] = result.map(item => {
+        let size:ESObject = {
+          width:this.toDoubleType(item.scanCodeRect!.right - item.scanCodeRect!.left),
+          height:this.toDoubleType(item.scanCodeRect!.bottom - item.scanCodeRect!.top)
+        };
+
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
@@ -254,7 +262,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
             { x: this.toDoubleType(item.scanCodeRect!.right),  y: this.toDoubleType(item.scanCodeRect!.top) } as Point,
             { x: this.toDoubleType(item.scanCodeRect!.right),  y: this.toDoubleType(item.scanCodeRect!.bottom) } as Point,
             { x: this.toDoubleType(item.scanCodeRect!.left),  y: this.toDoubleType(item.scanCodeRect!.bottom) } as Point,
-          ]
+          ],
+          size:size
         } as Barcode;
       })
       this.callback(_r, this.imageBuffer, this.scanWidth, this.scanHeight);
@@ -293,8 +302,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         } catch (e) {
           Log.e(TAG, `Failed to create imageBuffer`);
         }
-      } else {
-        Log.e(TAG, `Failed to get scanCodeRects by callback`);
       }
     }
 
@@ -360,8 +367,21 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     return number;
   }
 
+  async pause(call: MethodCall, result: MethodResult) {
+    let force: boolean = call.argument("force") ?? false
+
+    if (this.isStart || force) {
+      await customScan.stop();
+      await customScan.release();
+      this.isPaused = true;
+    }
+
+    result?.success(null)
+  }
+
   async stop(result: MethodResult | null) {
-    if (this.isStart) {
+    if (this.isStart || this.isPaused) {
+      this.isPaused = false;
       try {
         this.isStart = false;
         await customScan.stop();
@@ -388,18 +408,24 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
   }
 
   analyzeImage(call: MethodCall, result: MethodResult) {
+    let formats:number[] = call.argument("formats")
+    let filePath: string = call.argument("filePath")
+
     const options: scanBarcode.ScanOptions = {
       scanTypes: [scanCore.ScanType.ALL],
       enableMultiMode: true,
       enableAlbum: true
     }
-    let inputImage: detectBarcode.InputImage = { uri: call.args }
+    let inputImage: detectBarcode.InputImage = { uri: filePath }
     detectBarcode.decode(inputImage, options, (error: BusinessError, scanResult: Array<scanBarcode.ScanResult>) => {
       if (error && error.code) {
         return
       }
       if (scanResult.length == 0) {
-        result.success(false)
+        result.success({
+          name: 'barcode',
+          data: new Array<Barcode>()
+        })
         return
       }
       const barcodes: Barcode[] = scanResult.map(item => {
@@ -413,19 +439,24 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
             { x: this.toDoubleType(this.scanWidth - cornerPoints[3].y), y: this.toDoubleType(cornerPoints[3].x)},
           ]
         }
+
+        let size:ESObject = {
+          width:this.toDoubleType(item.scanCodeRect!.right - item.scanCodeRect!.left),
+          height:this.toDoubleType(item.scanCodeRect!.bottom - item.scanCodeRect!.top)
+        }
         return {
           displayValue: item.originalValue,
           rawValue: item.originalValue,
           format: Barcode.convertScanType(item.scanType),
           type: BarcodeType.unknown,
-          corners: corners
+          corners: corners,
+          size: size
         } as Barcode;
       });
-      this.publishEvent({
+      result.success({
         name: 'barcode',
         data: barcodes
       })
-      result.success(true)
     })
   }
 
@@ -450,7 +481,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   updateScanWindow(call: MethodCall, result: MethodResult) {
     this.scanWindow = call.argument("rect")
-    result.success(true)
+    result.success(null)
   }
 
   callback(barcodes: Barcode[], image: Uint8Array | null, width: number, height: number) {
@@ -464,25 +495,26 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     if (barcodes.length == 0) {
       customScan.rescan();
     }
-    if (image) {
-      this.publishEvent({
-        "name": "barcode",
-        "data": barcodes,
-        "image": image,
-        "width": width,
-        "height": height
-      })
-    } else {
-      if(!this.returnImage) {
-        this.publishEvent({
-          "name": "barcode",
-          "data": barcodes
-        })
-      }
+
+    if(!this.returnImage) {
+      image = null
     }
+
+    let imageinfo:ESObject = {
+      bytes:image,
+      width: width,
+      height: height
+    }
+
+    this.publishEvent({
+      "name": "barcode",
+      "data": barcodes,
+      "image": imageinfo
+    })
+   
     // 扫描完成后需要调用重新扫描继续识别
     setTimeout(() => {
-      if (this.isStart) {
+      if (this.isStart && !this.isPaused) {
         try {
           customScan.rescan();
         } catch (err) {

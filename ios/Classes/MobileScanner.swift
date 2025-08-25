@@ -17,16 +17,13 @@ typealias ZoomScaleChangeCallback = ((Double?) -> ())
 
 public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, FlutterTexture {
     /// Capture session of the camera
-    var captureSession: AVCaptureSession!
+    var captureSession: AVCaptureSession?
 
     /// The selected camera
     var device: AVCaptureDevice!
 
-    /// Barcode scanner for results
-    var scanner = BarcodeScanner.barcodeScanner()
-
-    /// Return image buffer with the Barcode event
-    var returnImage: Bool = false
+    /// The long lived barcode scanner for scanning barcodes from a camera preview.
+    var scanner: BarcodeScanner? = nil
 
     /// Default position of camera
     var videoPosition: AVCaptureDevice.Position = AVCaptureDevice.Position.back
@@ -60,6 +57,14 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
     private var imagesCurrentlyBeingProcessed = false
     
     public var timeoutSeconds: Double = 0
+
+    private var stopped: Bool {
+        return device == nil || captureSession == nil
+    }
+
+    private var paused: Bool {
+        return stopped && textureId != nil
+    }
 
     init(registry: FlutterTextureRegistry?, mobileScannerCallback: @escaping MobileScannerCallback, torchModeChangeCallback: @escaping TorchModeChangeCallback, zoomScaleChangeCallback: @escaping ZoomScaleChangeCallback) {
         self.registry = registry
@@ -126,8 +131,8 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
     
     /// Gets called when a new image is added to the buffer
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            print("Failed to get image buffer from sample buffer.")
             return
         }
         latestBuffer = imageBuffer
@@ -150,7 +155,7 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                 position: videoPosition
             )
 
-            scanner.process(image) { [self] barcodes, error in
+            scanner?.process(image) { [self] barcodes, error in
                 imagesCurrentlyBeingProcessed = false
                 
                 if (detectionSpeed == DetectionSpeed.noDuplicates) {
@@ -160,7 +165,9 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                     
                     if (error == nil && barcodesString != nil && newScannedBarcodes != nil && barcodesString!.elementsEqual(newScannedBarcodes!)) {
                         return
-                    } else if (newScannedBarcodes?.isEmpty == false) {
+                    }
+
+                    if (newScannedBarcodes?.isEmpty == false) {
                         barcodesString = newScannedBarcodes
                     }
                 }
@@ -171,16 +178,16 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
     }
 
     /// Start scanning for barcodes
-    func start(barcodeScannerOptions: BarcodeScannerOptions?, returnImage: Bool, cameraPosition: AVCaptureDevice.Position, torch: Bool, detectionSpeed: DetectionSpeed, completion: @escaping (MobileScannerStartParameters) -> ()) throws {
+    func start(barcodeScannerOptions: BarcodeScannerOptions?, cameraPosition: AVCaptureDevice.Position, torch: Bool, detectionSpeed: DetectionSpeed, completion: @escaping (MobileScannerStartParameters) -> ()) throws {
         self.detectionSpeed = detectionSpeed
-        if (device != nil) {
+        if (device != nil || captureSession != nil) {
             throw MobileScannerError.alreadyStarted
         }
 
         barcodesString = nil
         scanner = barcodeScannerOptions != nil ? BarcodeScanner.barcodeScanner(options: barcodeScannerOptions!) : BarcodeScanner.barcodeScanner()
         captureSession = AVCaptureSession()
-        textureId = registry?.register(self)
+        textureId = textureId ?? registry?.register(self)
 
         // Open the camera device
         device = getDefaultCameraDevice(position: cameraPosition)
@@ -216,17 +223,17 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
             device.unlockForConfiguration()
         } catch {}
 
-        captureSession.beginConfiguration()
+        captureSession!.beginConfiguration()
 
         // Add device input
         do {
             let input = try AVCaptureDeviceInput(device: device)
-            captureSession.addInput(input)
+            captureSession!.addInput(input)
         } catch {
             throw MobileScannerError.cameraError(error)
         }
 
-        captureSession.sessionPreset = AVCaptureSession.Preset.photo
+        captureSession!.sessionPreset = AVCaptureSession.Preset.photo
         // Add video output.
         let videoOutput = AVCaptureVideoDataOutput()
 
@@ -237,17 +244,21 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         // calls captureOutput()
         videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
 
-        captureSession.addOutput(videoOutput)
+        captureSession!.addOutput(videoOutput)
         for connection in videoOutput.connections {
             connection.videoOrientation = .portrait
             if cameraPosition == .front && connection.isVideoMirroringSupported {
                 connection.isVideoMirrored = true
             }
         }
-        captureSession.commitConfiguration()
+        captureSession!.commitConfiguration()
 
         backgroundQueue.async {
-            self.captureSession.startRunning()
+            guard let captureSession = self.captureSession else {
+                return
+            }
+
+            captureSession.startRunning()
 
             // After the capture session started, turn on the torch (if requested)
             // and reset the zoom scale back to the default.
@@ -255,12 +266,7 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
             // as they interact with the hardware camera.
             if (torch) {
                 DispatchQueue.main.async {
-                    do {
-                        try self.toggleTorch(.on)
-                    } catch {
-                        // If the torch does not turn on,
-                        // continue with the capture session anyway.
-                    }
+                    self.turnTorchOn()
                 }
             }
             
@@ -279,13 +285,12 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                 // as this does not change the configuration of the hardware camera.
                 let dimensions = CMVideoFormatDescriptionGetDimensions(
                     device.activeFormat.formatDescription)
-                let hasTorch = device.hasTorch
                 
                 completion(
                     MobileScannerStartParameters(
                         width: Double(dimensions.height),
                         height: Double(dimensions.width),
-                        hasTorch: hasTorch,
+                        currentTorchState: device.hasTorch ? device.torchMode.rawValue : -1,
                         textureId: self.textureId ?? 0
                     )
                 )
@@ -297,11 +302,36 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         }
     }
 
+    /// Pause scanning for barcodes
+    func pause(force: Bool = false) throws {
+        if (!force) {
+            if (paused) {
+                throw MobileScannerError.alreadyPaused
+            } else if (stopped) {
+                throw MobileScannerError.alreadyStopped
+            }
+        }
+        releaseCamera()
+    }
+
     /// Stop scanning for barcodes
-    func stop() throws {
-        if (device == nil) {
+    func stop(force: Bool = false) throws {
+        if (!paused && stopped && !force) {
             throw MobileScannerError.alreadyStopped
         }
+        releaseCamera()
+        releaseTexture()
+    }
+
+    private func releaseCamera() {
+        guard let captureSession = captureSession else {
+            return
+        }
+        
+        guard let device = device else {
+            return
+        }
+
         captureSession.stopRunning()
         for input in captureSession.inputs {
             captureSession.removeInput(input)
@@ -313,36 +343,79 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         latestBuffer = nil
         device.removeObserver(self, forKeyPath: #keyPath(AVCaptureDevice.torchMode))
         device.removeObserver(self, forKeyPath: #keyPath(AVCaptureDevice.videoZoomFactor))
-        registry?.unregisterTexture(textureId)
-        textureId = nil
-        captureSession = nil
-        device = nil
+        self.captureSession = nil
+        self.device = nil
     }
 
-    /// Set the torch mode.
+    private func releaseTexture() {
+        if (textureId != nil) {
+            registry?.unregisterTexture(textureId)
+        }
+        textureId = nil
+        scanner = nil
+    }
+
+    /// Toggle the torch.
     ///
     /// This method should be called on the main DispatchQueue.
-    func toggleTorch(_ torch: AVCaptureDevice.TorchMode) throws {
+    func toggleTorch() {
         guard let device = self.device else {
             return
         }
         
-        if (!device.hasTorch || !device.isTorchAvailable || !device.isTorchModeSupported(torch)) {
+        if (!device.hasTorch || !device.isTorchAvailable) {
             return
         }
         
-        if (device.torchMode != torch) {
-            try device.lockForConfiguration()
-            device.torchMode = torch
-            device.unlockForConfiguration()
+        var newTorchMode: AVCaptureDevice.TorchMode = device.torchMode
+        
+        switch(device.torchMode) {
+        case AVCaptureDevice.TorchMode.auto:
+            newTorchMode = device.isTorchActive ? AVCaptureDevice.TorchMode.off : AVCaptureDevice.TorchMode.on
+            break;
+        case AVCaptureDevice.TorchMode.off:
+            newTorchMode = AVCaptureDevice.TorchMode.on
+            break;
+        case AVCaptureDevice.TorchMode.on:
+            newTorchMode = AVCaptureDevice.TorchMode.off
+            break;
+        default:
+            return;
         }
+        
+        if (!device.isTorchModeSupported(newTorchMode) || device.torchMode == newTorchMode) {
+            return;
+        }
+
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = newTorchMode
+            device.unlockForConfiguration()
+        } catch(_) {}
+    }
+    
+    /// Turn the torch on.
+    private func turnTorchOn() {
+        guard let device = self.device else {
+            return
+        }
+        
+        if (!device.hasTorch || !device.isTorchAvailable || !device.isTorchModeSupported(.on) || device.torchMode == .on) {
+            return
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = .on
+            device.unlockForConfiguration()
+        } catch(_) {}
     }
 
     // Observer for torch state
     public override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
         switch keyPath {
         case "torchMode":
-            // off = 0; on = 1; auto = 2
+            // Off = 0, On = 1, Auto = 2
             let state = change?[.newKey] as? Int
             torchModeChangeCallback(state)
         case "videoZoomFactor":
@@ -397,7 +470,8 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
     }
 
     /// Analyze a single image
-    func analyzeImage(image: UIImage, position: AVCaptureDevice.Position, callback: @escaping BarcodeScanningCallback) {
+    func analyzeImage(image: UIImage, position: AVCaptureDevice.Position,
+                      barcodeScannerOptions: BarcodeScannerOptions?, callback: @escaping BarcodeScanningCallback) {
         let image = VisionImage(image: image)
         image.orientation = imageOrientation(
             deviceOrientation: UIDevice.current.orientation,
@@ -405,21 +479,12 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
             position: position
         )
 
+        let scanner: BarcodeScanner = barcodeScannerOptions != nil ? BarcodeScanner.barcodeScanner(options: barcodeScannerOptions!) : BarcodeScanner.barcodeScanner()
+
         scanner.process(image, completion: callback)
     }
 
     var barcodesString: Array<String?>?
-
-    //    /// Convert image buffer to jpeg
-    //    private func ciImageToJpeg(ciImage: CIImage) -> Data {
-    //
-    //        // let ciImage = CIImage(cvPixelBuffer: latestBuffer)
-    //        let context:CIContext = CIContext.init(options: nil)
-    //        let cgImage:CGImage = context.createCGImage(ciImage, from: ciImage.extent)!
-    //        let uiImage:UIImage = UIImage(cgImage: cgImage, scale: 1, orientation: UIImage.Orientation.up)
-    //
-    //        return uiImage.jpegData(compressionQuality: 0.8)!
-    //    }
 
     /// Rotates images accordingly
     func imageOrientation(
@@ -454,7 +519,7 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
     struct MobileScannerStartParameters {
         var width: Double = 0.0
         var height: Double = 0.0
-        var hasTorch = false
+        var currentTorchState: Int = -1
         var textureId: Int64 = 0
     }
 }
