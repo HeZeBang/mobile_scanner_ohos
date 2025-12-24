@@ -387,7 +387,11 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         await customScan.stop();
         await customScan.release();
       } catch (e) {
-        this.isStart = true;
+        try {
+          await customScan.release();
+        } catch (e) {
+          this.isStart = true;
+        }
       }
     }
     result?.success(null)
@@ -512,7 +516,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
       "data": barcodes,
       "image": imageinfo
     })
-   
+
     // 扫描完成后需要调用重新扫描继续识别
     setTimeout(() => {
       if (this.isStart && !this.isPaused) {
