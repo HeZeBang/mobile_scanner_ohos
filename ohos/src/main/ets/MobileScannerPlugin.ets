@@ -145,7 +145,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         });
       } else if (call.method === "start") {
         this.start(call, result)
-      } else if (call.method === "torch") {
+      } else if (call.method === "torch"|| call.method === "toggleTorch") {
         this.toggleTorch(call, result)
       } else if (call.method === "stop") {
         this.stop(result)
@@ -204,7 +204,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         "height": this.scanHeight
       },
       "torchable": hasFlashUnit(this.applicationContext!),
-      "numberOfCameras": 1
+      "numberOfCameras": 1,
+      "currentTorchState": customScan.getFlashLightStatus() ? TorchState.on : TorchState.off
     });
   }
 
