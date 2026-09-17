@@ -66,7 +66,7 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
     if (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.ohos) {
+        defaultTargetPlatform.name == 'ohos') {
       final Map<Object?, Object?>? imageData =
           event['image'] as Map<Object?, Object?>?;
       final Uint8List? image = imageData?['bytes'] as Uint8List?;

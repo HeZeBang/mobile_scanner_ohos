@@ -266,7 +266,7 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
     }
 
     double clampedZoomScale = zoomScale.clamp(0.0, 1.0);
-    if (defaultTargetPlatform == TargetPlatform.ohos) {
+    if (defaultTargetPlatform.name == 'ohos') {
       clampedZoomScale = zoomScale.clamp(0.0, 10.0);
     }
     // Update the zoom scale state to the new state.
