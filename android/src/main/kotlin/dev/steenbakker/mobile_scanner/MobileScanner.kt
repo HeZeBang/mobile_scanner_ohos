@@ -337,8 +337,20 @@ class MobileScanner(
                 request.provideSurface(surface, executor) { }
             }
 
-            // Build the preview to be shown on the Flutter texture
+            // Build the preview to be shown on the Flutter texture. Give it a
+            // clear resolution instead of CameraX's low default (640x480); the
+            // analysis below keeps its own resolution for ML Kit.
             val previewBuilder = Preview.Builder()
+                .setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                Size(1920, 1080),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                            )
+                        )
+                        .build()
+                )
             preview = previewBuilder.build().apply { setSurfaceProvider(surfaceProvider) }
 
             // Build the analyzer to be passed on to MLKit
