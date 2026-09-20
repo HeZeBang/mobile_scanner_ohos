@@ -313,9 +313,11 @@ class MobileScanner(
         barcode: Barcode,
         inputImage: ImageProxy
     ): Boolean {
-        // TODO: use `cornerPoints` instead, since the bounding box is not bound to the coordinate system of the input image
-        // On iOS we do this correctly, so the calculation should match that.
-        val barcodeBoundingBox = barcode.boundingBox ?: return false
+        // The barcode's corner points are in the input image's coordinate
+        // system; the axis-aligned bounding box is not (it is rotated with the
+        // frame). Build the box from the corners, matching the iOS path.
+        val cornerPoints = barcode.cornerPoints
+        if (cornerPoints.isNullOrEmpty()) return false
 
         try {
             val imageWidth = inputImage.height
@@ -328,7 +330,14 @@ class MobileScanner(
 
             val scaledScanWindow = Rect(left, top, right, bottom)
 
-            return scaledScanWindow.contains(barcodeBoundingBox)
+            val barcodeBox = Rect(
+                cornerPoints.minOf { it.x },
+                cornerPoints.minOf { it.y },
+                cornerPoints.maxOf { it.x },
+                cornerPoints.maxOf { it.y },
+            )
+
+            return scaledScanWindow.contains(barcodeBox)
         } catch (exception: IllegalArgumentException) {
             // Rounding of the scan window dimensions can fail, due to encountering NaN.
             // If we get NaN, rather than give a false positive, just return false.
@@ -433,7 +442,7 @@ class MobileScanner(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             val displayManager = activity.applicationContext.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
-            val cameraResolution =  cameraResolutionWanted ?: Size(1920, 1080)
+            val cameraResolution =  cameraResolutionWanted ?: Size(1280, 720)
 
             val selectorBuilder = ResolutionSelector.Builder()
             selectorBuilder.setResolutionStrategy(
@@ -500,7 +509,11 @@ class MobileScanner(
                 }
             }
 
-            val resolution = analysis.resolutionInfo!!.resolution
+            // Report the preview's resolution, not the analysis': the Dart side
+            // sizes the texture to this, so reporting the analysis resolution
+            // would shrink the viewfinder to that lower resolution on screen.
+            val resolution =
+                preview?.resolutionInfo?.resolution ?: analysis.resolutionInfo!!.resolution
             val width = resolution.width.toDouble()
             val height = resolution.height.toDouble()
             val sensorRotationDegrees = camera?.cameraInfo?.sensorRotationDegrees ?: 0
