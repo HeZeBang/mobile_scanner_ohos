@@ -68,6 +68,7 @@ class MobileScanner(
     private var returnImage = false
     private var isPaused = false
     private var previewFrameSent = false
+    private var mobileScannerPreviewFrameCallback: MobileScannerPreviewFrameCallback? = null
 
     companion object {
         /**
@@ -84,6 +85,16 @@ class MobileScanner(
     @ExperimentalGetImage
     val captureOutput = ImageAnalysis.Analyzer { imageProxy -> // YUV_420_888 format
         val mediaImage = imageProxy.image ?: return@Analyzer
+
+        // The first frame the analyzer sees is when the camera is producing
+        // frames — the same signal the preview texture's first frame gives, but
+        // without replacing the engine's SurfaceTexture frame listener (which is
+        // what actually updates the texture on screen).
+        if (!previewFrameSent) {
+            previewFrameSent = true
+            mobileScannerPreviewFrameCallback?.invoke()
+        }
+
         val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
         if (detectionSpeed == DetectionSpeed.NORMAL && scannerTimeout) {
@@ -268,6 +279,7 @@ class MobileScanner(
         this.returnImage = returnImage
         // Every start reports its own first frame.
         this.previewFrameSent = false
+        this.mobileScannerPreviewFrameCallback = mobileScannerPreviewFrameCallback
 
         if (camera?.cameraInfo != null && preview != null && textureEntry != null && !isPaused) {
 
@@ -308,18 +320,6 @@ class MobileScanner(
 
             cameraProvider?.unbindAll()
             textureEntry = textureEntry ?: textureRegistry.createSurfaceTexture()
-
-            // The first frame the camera writes into the preview texture is the
-            // moment the preview stops showing the previous session's picture —
-            // `start` only says the camera was bound. The engine latches the
-            // frame it is told about on the next vsync, so this is the earliest
-            // honest signal that a live picture is about to be on screen.
-            textureEntry!!.surfaceTexture().setOnFrameAvailableListener({
-                if (!previewFrameSent) {
-                    previewFrameSent = true
-                    mobileScannerPreviewFrameCallback()
-                }
-            }, Handler(Looper.getMainLooper()))
 
             // Preview
             val surfaceProvider = Preview.SurfaceProvider { request ->
