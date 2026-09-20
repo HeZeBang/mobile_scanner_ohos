@@ -107,6 +107,14 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
   /// a [MobileScannerBarcodeException] error is emitted to the stream.
   Stream<BarcodeCapture> get barcodes => _barcodesController.stream;
 
+  /// Emits once per [start], when the preview has delivered its first frame.
+  ///
+  /// [start] resolves as soon as the platform accepts the request; this is when
+  /// camera frames are actually arriving and the preview stops showing whatever
+  /// it was left with before.
+  Stream<void> get previewStartedStream =>
+      MobileScannerPlatform.instance.previewStartedStream;
+
   StreamSubscription<BarcodeCapture?>? _barcodesSubscription;
   StreamSubscription<TorchState>? _torchStateSubscription;
   StreamSubscription<double>? _zoomScaleSubscription;
@@ -229,10 +237,14 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
   }
 
   /// Build a camera preview widget.
+  ///
+  /// A frozen controller keeps showing the frame it was frozen on.
   Widget buildCameraView() {
     _throwIfNotInitialized();
 
-    return MobileScannerPlatform.instance.buildCameraView();
+    return MobileScannerPlatform.instance.buildCameraView(
+      freeze: value.frozen,
+    );
   }
 
   /// Reset the zoom scale of the camera.
@@ -324,6 +336,7 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
         value = value.copyWith(
           availableCameras: viewAttributes.numberOfCameras,
           cameraDirection: effectiveDirection,
+          frozen: false,
           isInitialized: true,
           isRunning: true,
           size: viewAttributes.size,
@@ -354,11 +367,19 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
   ///
   /// After calling this method, the camera can be restarted using [start].
   ///
-  /// Does nothing if the camera is already stopped.
-  Future<void> stop() async {
+  /// Does nothing if the camera is already stopped, unless [force] is set, in
+  /// which case the platform resources are released even when the camera was
+  /// only paused (see [freezePreview]) or never started.
+  Future<void> stop({bool force = false}) async {
     if (_stop()) {
-      await MobileScannerPlatform.instance.stop();
+      await MobileScannerPlatform.instance.stop(force: force);
+      return;
     }
+    if (!force || _isDisposed || !value.isInitialized) {
+      return;
+    }
+    value = value.copyWith(frozen: false, isRunning: false);
+    await MobileScannerPlatform.instance.stop(force: true);
   }
 
   /// Pause the camera.
@@ -371,6 +392,27 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
     if (_stop()) {
       await MobileScannerPlatform.instance.pause();
     }
+  }
+
+  /// Freeze the preview on the frame that is on screen right now.
+  ///
+  /// The preview stops following the camera and keeps showing that frame, while
+  /// the camera behind it is paused — the frame a decoded barcode was read from
+  /// can therefore be shown next to the result. The preview texture is kept, so
+  /// the frozen frame stays visible until [start] (which unfreezes and resumes)
+  /// or [stop] (which releases everything).
+  ///
+  /// The texture is frozen before the pause is requested, so a frame that is
+  /// already on its way to the preview cannot replace the frozen one.
+  ///
+  /// Does nothing if the camera is not initialized or already frozen.
+  Future<void> freezePreview() async {
+    if (_isDisposed || !value.isInitialized || value.frozen) {
+      return;
+    }
+
+    value = value.copyWith(frozen: true);
+    await pause();
   }
 
   /// Switch between the front and back camera.

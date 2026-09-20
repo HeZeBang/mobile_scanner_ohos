@@ -83,6 +83,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
   private scanWindow: Array<number> | null = null; // scanWindow，扫描区域
   private imageBuffer: Uint8Array | null = null;
+  private pendingScanResults: scanBarcode.ScanResult[] | null = null;
+  private previewFrameSent: boolean = false;
   private isPaused:boolean = false
 
   publishEvent(event: ESObject) {
@@ -179,6 +181,8 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
 
     this.scanWindow = null;
     this.retryScanTimes = 0;
+    // Every start reports its own first frame.
+    this.previewFrameSent = false;
     this.isStart = true;
     let scanTypes = [scanCore.ScanType.ALL]
     if (this.formats) {
@@ -238,7 +242,6 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     });
   }
 
-  // 返回自定义扫描结果的回调
   private scanCallback: AsyncCallback<scanBarcode.ScanResult[]> =
     async (error: BusinessError, result: scanBarcode.ScanResult[]) => {
       if (error && error.code) {
@@ -246,42 +249,55 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
         this.retryCamera(error);
         return;
       }
-      // 解析码值结果跳转应用服务页
-      const _r: Barcode[] = result.map(item => {
-        let size:ESObject = {
-          width:this.toDoubleType(item.scanCodeRect!.right - item.scanCodeRect!.left),
-          height:this.toDoubleType(item.scanCodeRect!.bottom - item.scanCodeRect!.top)
-        };
-
-        return {
-          displayValue: item.originalValue,
-          rawValue: item.originalValue,
-          format: Barcode.convertScanType(item.scanType),
-          type: BarcodeType.unknown,
-          corners: [
-            { x: this.toDoubleType(item.scanCodeRect!.left),  y: this.toDoubleType(item.scanCodeRect!.top) } as Point,
-            { x: this.toDoubleType(item.scanCodeRect!.right),  y: this.toDoubleType(item.scanCodeRect!.top) } as Point,
-            { x: this.toDoubleType(item.scanCodeRect!.right),  y: this.toDoubleType(item.scanCodeRect!.bottom) } as Point,
-            { x: this.toDoubleType(item.scanCodeRect!.left),  y: this.toDoubleType(item.scanCodeRect!.bottom) } as Point,
-          ],
-          size:size
-        } as Barcode;
-      })
-      this.callback(_r, this.imageBuffer, this.scanWidth, this.scanHeight);
+      if (this.returnImage && this.imageBuffer == null) {
+        // Frame encoding is asynchronous and can finish after ScanKit reports
+        // the barcode. Hold the result until the matching camera frame exists.
+        this.pendingScanResults = result;
+        Log.i(TAG, `barcode pending image results=${result.length}`);
+        return;
+      }
+      this.emitScanResults(result);
     }
-  // 返回相机帧的回调
+
+  private emitScanResults(result: scanBarcode.ScanResult[]) {
+    const _r: Barcode[] = result.map(item => {
+      let size:ESObject = {
+        width:this.toDoubleType(item.scanCodeRect!.right - item.scanCodeRect!.left),
+        height:this.toDoubleType(item.scanCodeRect!.bottom - item.scanCodeRect!.top)
+      };
+      return {
+        displayValue: item.originalValue,
+        rawValue: item.originalValue,
+        format: Barcode.convertScanType(item.scanType),
+        type: BarcodeType.unknown,
+        corners: [
+          { x: this.toDoubleType(item.scanCodeRect!.left), y: this.toDoubleType(item.scanCodeRect!.top) } as Point,
+          { x: this.toDoubleType(item.scanCodeRect!.right), y: this.toDoubleType(item.scanCodeRect!.top) } as Point,
+          { x: this.toDoubleType(item.scanCodeRect!.right), y: this.toDoubleType(item.scanCodeRect!.bottom) } as Point,
+          { x: this.toDoubleType(item.scanCodeRect!.left), y: this.toDoubleType(item.scanCodeRect!.bottom) } as Point,
+        ],
+        size:size
+      } as Barcode;
+    });
+    this.callback(_r, this.imageBuffer, this.scanWidth, this.scanHeight);
+    this.pendingScanResults = null;
+  }
   private frameCallback: AsyncCallback<customScan.ScanFrame> =
     async (error: BusinessError, frameResult: customScan.ScanFrame) => {
-      this.imageBuffer = null;
       if (error) {
         Log.e(TAG, `Failed to get ScanFrame by callback. Code: ${error.code}, message: ${error.message}`);
         return;
+      }
+      // The scan kit reports frames only once the preview stream is really
+      // running, so the first one is the end of the previous session's picture.
+      if (frameResult && !this.previewFrameSent) {
+        this.previewFrameSent = true;
+        this.publishEvent({ name: 'previewStarted', data: null });
       }
       if (frameResult && this.returnImage) {
         try {
           const EventWidth = frameResult.width;
           const EventHeight = frameResult.height;
-
           let sourcePotions: image.SourceOptions = {
             sourceDensity: 120,
             sourcePixelFormat: image.PixelMapFormat.NV21,
@@ -294,12 +310,15 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
             size: { height: EventHeight, width: EventWidth }
           }
           let pixelMap: image.PixelMap = await imageResource.createPixelMap(opts)
-          // 修正相机预览流方向
           pixelMap.rotateSync(camera.ImageRotation.ROTATION_90)
           let packer: image.ImagePacker = image.createImagePacker()
           let packingOpt: image.PackingOption = { format: "image/jpeg", quality: 100 }
           let imgBuffer = await packer.packing(pixelMap, packingOpt);
           this.imageBuffer = new Uint8Array(imgBuffer)
+          if (this.pendingScanResults != null) {
+            const pending = this.pendingScanResults;
+            this.emitScanResults(pending);
+          }
         } catch (e) {
           Log.e(TAG, `Failed to create imageBuffer`);
         }

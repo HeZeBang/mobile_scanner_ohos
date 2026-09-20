@@ -14,6 +14,7 @@ import MLKitBarcodeScanning
 typealias MobileScannerCallback = ((Array<Barcode>?, Error?, UIImage) -> ())
 typealias TorchModeChangeCallback = ((Int?) -> ())
 typealias ZoomScaleChangeCallback = ((Double?) -> ())
+typealias PreviewFrameCallback = (() -> ())
 
 public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, FlutterTexture {
     /// Capture session of the camera
@@ -36,6 +37,13 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
 
     /// When zoom scale is changes, this callback will be called
     let zoomScaleChangeCallback: ZoomScaleChangeCallback
+
+    /// When the preview delivers its first frame after a start, this callback
+    /// will be called — `start` only says the session was configured.
+    let previewFrameCallback: PreviewFrameCallback
+
+    /// Whether the current start has already reported its first frame.
+    private var previewFrameSent = false
 
     /// If provided, the Flutter registry will be used to send the output of the CaptureOutput to a Flutter texture.
     private let registry: FlutterTextureRegistry?
@@ -66,11 +74,12 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         return stopped && textureId != nil
     }
 
-    init(registry: FlutterTextureRegistry?, mobileScannerCallback: @escaping MobileScannerCallback, torchModeChangeCallback: @escaping TorchModeChangeCallback, zoomScaleChangeCallback: @escaping ZoomScaleChangeCallback) {
+    init(registry: FlutterTextureRegistry?, mobileScannerCallback: @escaping MobileScannerCallback, torchModeChangeCallback: @escaping TorchModeChangeCallback, zoomScaleChangeCallback: @escaping ZoomScaleChangeCallback, previewFrameCallback: @escaping PreviewFrameCallback) {
         self.registry = registry
         self.mobileScannerCallback = mobileScannerCallback
         self.torchModeChangeCallback = torchModeChangeCallback
         self.zoomScaleChangeCallback = zoomScaleChangeCallback
+        self.previewFrameCallback = previewFrameCallback
         super.init()
     }
 
@@ -137,6 +146,13 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         }
         latestBuffer = imageBuffer
         registry?.textureFrameAvailable(textureId)
+
+        // The sample buffers only arrive once the session is running, so the
+        // first one ends whatever the preview was showing before.
+        if !previewFrameSent {
+            previewFrameSent = true
+            previewFrameCallback()
+        }
         
         let currentTime = Date().timeIntervalSince1970
         let eligibleForScan = currentTime > nextScanTime && !imagesCurrentlyBeingProcessed
@@ -187,6 +203,8 @@ public class MobileScanner: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         barcodesString = nil
         scanner = barcodeScannerOptions != nil ? BarcodeScanner.barcodeScanner(options: barcodeScannerOptions!) : BarcodeScanner.barcodeScanner()
         captureSession = AVCaptureSession()
+        // Every start reports its own first frame.
+        previewFrameSent = false
         textureId = textureId ?? registry?.register(self)
 
         // Open the camera device

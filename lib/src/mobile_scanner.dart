@@ -233,7 +233,9 @@ class _MobileScannerState extends State<MobileScanner>
                   child: SizedBox(
                     width: cameraPreviewSize.width,
                     height: cameraPreviewSize.height,
-                    child: MobileScannerPlatform.instance.buildCameraView(),
+                    child: MobileScannerPlatform.instance.buildCameraView(
+                      freeze: value.frozen,
+                    ),
                   ),
                 ),
               ),

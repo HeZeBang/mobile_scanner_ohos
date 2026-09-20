@@ -60,9 +60,20 @@ abstract class MobileScannerPlatform extends PlatformInterface {
   }
 
   /// Build the camera view for the barcode scanner.
-  Widget buildCameraView() {
+  ///
+  /// When [freeze] is true, the view keeps showing the last frame it was given
+  /// instead of following the camera.
+  Widget buildCameraView({bool freeze = false}) {
     throw UnimplementedError('buildCameraView() has not been implemented.');
   }
+
+  /// Emits once per start, when the preview has delivered its first frame.
+  ///
+  /// [start] reports that the platform accepted the request; this is the moment
+  /// camera frames are actually arriving, and the picture stops being whatever
+  /// the preview was left showing. Platforms that cannot report it (the web)
+  /// never emit, so callers must bound their wait.
+  Stream<void> get previewStartedStream => const Stream<void>.empty();
 
   /// Reset the zoom scale, so that the camera is fully zoomed out.
   Future<void> resetZoomScale() {
@@ -93,7 +104,10 @@ abstract class MobileScannerPlatform extends PlatformInterface {
   }
 
   /// Stop the camera.
-  Future<void> stop() {
+  ///
+  /// When [force] is true the platform releases its resources even when the
+  /// camera was only paused, which is what a frozen preview needs.
+  Future<void> stop({bool force = false}) {
     throw UnimplementedError('stop() has not been implemented.');
   }
 

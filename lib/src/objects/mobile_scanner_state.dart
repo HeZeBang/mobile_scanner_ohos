@@ -16,6 +16,7 @@ class MobileScannerState {
     required this.size,
     required this.torchState,
     required this.zoomScale,
+    this.frozen = false,
     this.error,
   });
 
@@ -62,6 +63,14 @@ class MobileScannerState {
   /// The current zoom scale of the camera.
   final double zoomScale;
 
+  /// Whether the preview is frozen on its last frame.
+  ///
+  /// A frozen preview keeps showing the frame that was on screen when
+  /// [MobileScannerController.freezePreview] was called, while the camera behind
+  /// it is paused. Freezing does not release the preview texture, so [start]
+  /// resumes and [stop] releases.
+  final bool frozen;
+
   /// Whether permission to access the camera was granted.
   bool get hasCameraPermission {
     return isInitialized &&
@@ -73,6 +82,7 @@ class MobileScannerState {
     int? availableCameras,
     CameraFacing? cameraDirection,
     MobileScannerException? error,
+    bool? frozen,
     bool? isInitialized,
     bool? isRunning,
     Size? size,
@@ -83,6 +93,7 @@ class MobileScannerState {
       availableCameras: availableCameras ?? this.availableCameras,
       cameraDirection: cameraDirection ?? this.cameraDirection,
       error: error,
+      frozen: frozen ?? this.frozen,
       isInitialized: isInitialized ?? this.isInitialized,
       isRunning: isRunning ?? this.isRunning,
       size: size ?? this.size,

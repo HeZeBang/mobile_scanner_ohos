@@ -67,6 +67,7 @@ class MobileScanner(
     private var detectionTimeout: Long = 250
     private var returnImage = false
     private var isPaused = false
+    private var previewFrameSent = false
 
     companion object {
         /**
@@ -257,6 +258,7 @@ class MobileScanner(
         zoomScaleStateCallback: ZoomScaleStateCallback,
         mobileScannerStartedCallback: MobileScannerStartedCallback,
         mobileScannerErrorCallback: (exception: Exception) -> Unit,
+        mobileScannerPreviewFrameCallback: MobileScannerPreviewFrameCallback,
         detectionTimeout: Long,
         cameraResolution: Size?,
         newCameraResolutionSelector: Boolean
@@ -264,6 +266,8 @@ class MobileScanner(
         this.detectionSpeed = detectionSpeed
         this.detectionTimeout = detectionTimeout
         this.returnImage = returnImage
+        // Every start reports its own first frame.
+        this.previewFrameSent = false
 
         if (camera?.cameraInfo != null && preview != null && textureEntry != null && !isPaused) {
 
@@ -304,6 +308,18 @@ class MobileScanner(
 
             cameraProvider?.unbindAll()
             textureEntry = textureEntry ?: textureRegistry.createSurfaceTexture()
+
+            // The first frame the camera writes into the preview texture is the
+            // moment the preview stops showing the previous session's picture —
+            // `start` only says the camera was bound. The engine latches the
+            // frame it is told about on the next vsync, so this is the earliest
+            // honest signal that a live picture is about to be on screen.
+            textureEntry!!.surfaceTexture().setOnFrameAvailableListener({
+                if (!previewFrameSent) {
+                    previewFrameSent = true
+                    mobileScannerPreviewFrameCallback()
+                }
+            }, Handler(Looper.getMainLooper()))
 
             // Preview
             val surfaceProvider = Preview.SurfaceProvider { request ->

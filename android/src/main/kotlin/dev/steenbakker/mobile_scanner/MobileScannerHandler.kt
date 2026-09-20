@@ -208,6 +208,9 @@ class MobileScannerHandler(
                     }
                 }
             },
+            mobileScannerPreviewFrameCallback = {
+                barcodeHandler.publishEvent(mapOf("name" to "previewStarted"))
+            },
             timeout.toLong(),
             cameraResolution,
             useNewCameraSelector

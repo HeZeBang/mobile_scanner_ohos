@@ -24,6 +24,11 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
   @visibleForTesting
   static const String kBarcodeErrorEventName = 'MOBILE_SCANNER_BARCODE_ERROR';
 
+  /// The name of the event that is sent when the preview delivers its first
+  /// frame after a start.
+  @visibleForTesting
+  static const String kPreviewStartedEventName = 'previewStarted';
+
   /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel(
@@ -167,6 +172,13 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
   }
 
   @override
+  Stream<void> get previewStartedStream {
+    return eventsStream
+        .where((event) => event['name'] == kPreviewStartedEventName)
+        .map((_) {});
+  }
+
+  @override
   Future<BarcodeCapture?> analyzeImage(
     String path, {
     List<BarcodeFormat> formats = const <BarcodeFormat>[],
@@ -198,12 +210,12 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
   }
 
   @override
-  Widget buildCameraView() {
+  Widget buildCameraView({bool freeze = false}) {
     if (_textureId == null) {
       return const SizedBox();
     }
 
-    return Texture(textureId: _textureId!);
+    return Texture(textureId: _textureId!, freeze: freeze);
   }
 
   @override

@@ -231,13 +231,20 @@ class MobileScannerWeb extends MobileScannerPlatform {
   }
 
   @override
-  Widget buildCameraView() {
+  Widget buildCameraView({bool freeze = false}) {
+    // The web preview is a live <video> element, which the engine does not own
+    // the frames of, so it cannot be frozen here.
     if (_barcodeReader?.isScanning ?? false) {
       return HtmlElementView(viewType: _getViewType(_textureId));
     }
 
     return const SizedBox();
   }
+
+  @override
+  // The <video> element owns its own frames, so the web never reports this and
+  // callers fall back to their bound.
+  Stream<void> get previewStartedStream => const Stream<void>.empty();
 
   @override
   Future<void> resetZoomScale() {
@@ -379,7 +386,9 @@ class MobileScannerWeb extends MobileScannerPlatform {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool force = false}) async {
+    // The web reader has no paused-but-holding-resources state, so a forced
+    // stop is the same stop.
     // Ensure the barcode scanner is stopped, by cancelling the subscription.
     await _barcodesSubscription?.cancel();
     _barcodesSubscription = null;
