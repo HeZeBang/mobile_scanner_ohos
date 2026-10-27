@@ -425,7 +425,8 @@ public class MobileScannerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler,
 
         // Add video output
         let videoOutput = AVCaptureVideoDataOutput()
-        videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        let format = getPreferredVideoFormat(videoOutput: videoOutput)
+        videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: format]
         videoOutput.alwaysDiscardsLateVideoFrames = true
 
         videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue.main)
@@ -500,6 +501,34 @@ public class MobileScannerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler,
                 result(answer)
             }
         }
+    }
+
+    /// Get the preferred video format for the given video output.
+    private func getPreferredVideoFormat(videoOutput: AVCaptureVideoDataOutput) -> OSType {
+        // Define preferred pixel formats in order of preference
+        let preferredFormats: [OSType] = [
+            kCVPixelFormatType_32BGRA,
+            kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        ]
+
+        // Get available formats and convert from NSNumber to OSType
+        let availableFormats = videoOutput.availableVideoPixelFormatTypes
+        let availablePixelFormats = availableFormats.compactMap { ($0 as NSNumber).uint32Value }
+
+        // Find the first preferred format that is available
+        for format in preferredFormats {
+            if availablePixelFormats.contains(format) {
+                return format
+            }
+        }
+
+        if let firstAvailable = availablePixelFormats.first {
+            return firstAvailable
+        }
+
+        // Ultimate fallback: use the original default format
+        return kCVPixelFormatType_32BGRA
     }
 
     /// Turn the torch on.
