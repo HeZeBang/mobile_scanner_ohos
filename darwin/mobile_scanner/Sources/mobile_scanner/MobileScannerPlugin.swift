@@ -30,6 +30,8 @@ public class MobileScannerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler,
     // Image to be sent to the texture
     var latestBuffer: CVImageBuffer!
 
+    private var previewFrameSent = false
+
     // optional window to limit scan search
     var scanWindow: CGRect?
 
@@ -150,6 +152,11 @@ public class MobileScannerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler,
         }
         latestBuffer = imageBuffer
         registry.textureFrameAvailable(textureId)
+
+        if !previewFrameSent {
+            previewFrameSent = true
+            sink?(["name": "previewStarted", "data": nil])
+        }
         
         let currentTime = Date().timeIntervalSince1970
         let eligibleForScan = currentTime > nextScanTime && !imagesCurrentlyBeingProcessed
@@ -339,6 +346,7 @@ public class MobileScannerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler,
 
         textureId = textureId ?? registry.register(self)
         captureSession = AVCaptureSession()
+        previewFrameSent = false
 
         let argReader = MapArgumentReader(call.arguments as? [String: Any])
 

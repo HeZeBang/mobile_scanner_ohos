@@ -34,6 +34,11 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
   static const String kUnsupportdOperationErrorEventName =
       'MOBILE_SCANNER_UNSUPPORTED_OPERATION';
 
+  /// The name of the event that is sent when the preview delivers its first
+  /// frame after a start.
+  @visibleForTesting
+  static const String kPreviewStartedEventName = 'previewStarted';
+
   /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel(
@@ -205,6 +210,13 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
   }
 
   @override
+  Stream<void> get previewStartedStream {
+    return eventsStream
+        .where((event) => event['name'] == kPreviewStartedEventName)
+        .map((_) {});
+  }
+
+  @override
   Future<BarcodeCapture?> analyzeImage(
     String path, {
     List<BarcodeFormat> formats = const <BarcodeFormat>[],
@@ -238,12 +250,12 @@ class MethodChannelMobileScanner extends MobileScannerPlatform {
   }
 
   @override
-  Widget buildCameraView() {
+  Widget buildCameraView({bool freeze = false}) {
     if (_textureId == null) {
       return const SizedBox();
     }
 
-    final Widget texture = Texture(textureId: _textureId!);
+    final Widget texture = Texture(textureId: _textureId!, freeze: freeze);
 
     // If the preview needs manual orientation corrections,
     // correct the preview orientation based on the currently reported device

@@ -83,6 +83,8 @@ class MobileScanner(
     private var detectionTimeout: Long = 250
     private var returnImage = false
     private var isPaused = false
+    private var previewFrameSent = false
+    private var mobileScannerPreviewFrameCallback: MobileScannerPreviewFrameCallback? = null
 
     companion object {
         // Configure the `ProcessCameraProvider` to only log errors.
@@ -113,6 +115,15 @@ class MobileScanner(
     @ExperimentalGetImage
     val captureOutput = ImageAnalysis.Analyzer { imageProxy -> // YUV_420_888 format
         val mediaImage = imageProxy.image ?: return@Analyzer
+
+        // The first frame the analyzer sees is when the camera is producing
+        // frames — the same signal the preview texture's first frame gives, but
+        // without replacing the engine's SurfaceTexture frame listener (which is
+        // what actually updates the texture on screen).
+        if (!previewFrameSent) {
+            previewFrameSent = true
+            mobileScannerPreviewFrameCallback?.invoke()
+        }
 
         val inputImage = if (invertImage) {
             invertInputImage(imageProxy)
@@ -340,6 +351,7 @@ class MobileScanner(
         zoomScaleStateCallback: ZoomScaleStateCallback,
         mobileScannerStartedCallback: MobileScannerStartedCallback,
         mobileScannerErrorCallback: (exception: Exception) -> Unit,
+        mobileScannerPreviewFrameCallback: MobileScannerPreviewFrameCallback,
         detectionTimeout: Long,
         cameraResolutionWanted: Size?,
         invertImage: Boolean,
@@ -348,6 +360,9 @@ class MobileScanner(
         this.detectionTimeout = detectionTimeout
         this.returnImage = returnImage
         this.invertImage = invertImage
+        // Every start reports its own first frame.
+        this.previewFrameSent = false
+        this.mobileScannerPreviewFrameCallback = mobileScannerPreviewFrameCallback
 
         if (camera?.cameraInfo != null && preview != null && surfaceProducer != null && !isPaused) {
 
