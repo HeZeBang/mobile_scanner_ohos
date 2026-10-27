@@ -77,12 +77,14 @@ class MobileScannerState {
 
   /// The current device UI orientation.
   final DeviceOrientation deviceOrientation;
+
   /// Whether the preview is frozen on its last frame.
   ///
   /// A frozen preview keeps showing the frame that was on screen when
-  /// [MobileScannerController.freezePreview] was called, while the camera behind
-  /// it is paused. Freezing does not release the preview texture, so [start]
-  /// resumes and [stop] releases.
+  /// [MobileScannerController.freezePreview] was called, while the camera
+  /// behind it is paused. Freezing does not release the preview texture, so
+  /// [MobileScannerController.start] resumes and
+  /// [MobileScannerController.stop] releases.
   final bool frozen;
 
   /// Whether permission to access the camera was granted.
