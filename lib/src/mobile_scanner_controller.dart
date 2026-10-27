@@ -187,7 +187,8 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
 
     if (MobileScannerPlatform.instance
         case final MethodChannelMobileScanner implementation
-        when defaultTargetPlatform != TargetPlatform.macOS) {
+        when defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS) {
       _deviceOrientationSubscription = implementation
           .deviceOrientationChangedStream
           .listen((DeviceOrientation orientation) {
@@ -311,8 +312,10 @@ class MobileScannerController extends ValueNotifier<MobileScannerState> {
       return;
     }
 
-    final double clampedZoomScale = zoomScale.clamp(0.0, 1.0);
-
+    double clampedZoomScale = zoomScale.clamp(0.0, 1.0);
+    if (defaultTargetPlatform.name == 'ohos') {
+      clampedZoomScale = zoomScale.clamp(0.0, 10.0);
+    }
     // Update the zoom scale state to the new state.
     // When the platform has updated the zoom scale,
     // it will send an update through the zoom scale state event stream.
