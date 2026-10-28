@@ -203,6 +203,7 @@ export class MobileScannerPlugin implements FlutterPlugin, MethodCallHandler, Ab
     // dart 中接收的 width 和 height 会转换为 double 类型，返回整数会导致异常
     result.success({
       "textureId": this.textureId,
+      "cameraDirection": this.facing,
       "size": {
         "width": this.scanWidth,
         "height": this.scanHeight

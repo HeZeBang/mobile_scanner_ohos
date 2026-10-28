@@ -1,5 +1,7 @@
-import 'dart:ui';
+/// @docImport 'package:mobile_scanner/src/mobile_scanner_controller.dart';
+library;
 
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/src/enums/camera_facing.dart';
 import 'package:mobile_scanner/src/enums/mobile_scanner_error_code.dart';
 import 'package:mobile_scanner/src/enums/torch_state.dart';
@@ -12,25 +14,29 @@ class MobileScannerState {
     required this.availableCameras,
     required this.cameraDirection,
     required this.isInitialized,
+    required this.isStarting,
     required this.isRunning,
     required this.size,
     required this.torchState,
     required this.zoomScale,
+    required this.deviceOrientation,
     this.frozen = false,
     this.error,
   });
 
   /// Create a new [MobileScannerState] instance that is uninitialized.
-  const MobileScannerState.uninitialized(CameraFacing facing)
-      : this(
-          availableCameras: null,
-          cameraDirection: facing,
-          isInitialized: false,
-          isRunning: false,
-          size: Size.zero,
-          torchState: TorchState.unavailable,
-          zoomScale: 1.0,
-        );
+  const MobileScannerState.uninitialized()
+    : this(
+        availableCameras: null,
+        cameraDirection: CameraFacing.unknown,
+        isInitialized: false,
+        isStarting: false,
+        isRunning: false,
+        size: Size.zero,
+        torchState: TorchState.unavailable,
+        deviceOrientation: DeviceOrientation.portraitUp,
+        zoomScale: 1,
+      );
 
   /// The number of available cameras.
   ///
@@ -49,6 +55,12 @@ class MobileScannerState {
   /// To check if the camera permission was granted, use [hasCameraPermission].
   final bool isInitialized;
 
+  /// Whether the mobile scanner is currently in the process of starting.
+  ///
+  /// This flag helps prevent duplicate calls to
+  /// [MobileScannerController.start].
+  final bool isStarting;
+
   /// Whether the mobile scanner is currently running.
   ///
   /// This is `true` if the camera is active.
@@ -63,12 +75,16 @@ class MobileScannerState {
   /// The current zoom scale of the camera.
   final double zoomScale;
 
+  /// The current device UI orientation.
+  final DeviceOrientation deviceOrientation;
+
   /// Whether the preview is frozen on its last frame.
   ///
   /// A frozen preview keeps showing the frame that was on screen when
-  /// [MobileScannerController.freezePreview] was called, while the camera behind
-  /// it is paused. Freezing does not release the preview texture, so [start]
-  /// resumes and [stop] releases.
+  /// [MobileScannerController.freezePreview] was called, while the camera
+  /// behind it is paused. Freezing does not release the preview texture, so
+  /// [MobileScannerController.start] resumes and
+  /// [MobileScannerController.stop] releases.
   final bool frozen;
 
   /// Whether permission to access the camera was granted.
@@ -84,9 +100,11 @@ class MobileScannerState {
     MobileScannerException? error,
     bool? frozen,
     bool? isInitialized,
+    bool? isStarting,
     bool? isRunning,
     Size? size,
     TorchState? torchState,
+    DeviceOrientation? deviceOrientation,
     double? zoomScale,
   }) {
     return MobileScannerState(
@@ -95,9 +113,11 @@ class MobileScannerState {
       error: error,
       frozen: frozen ?? this.frozen,
       isInitialized: isInitialized ?? this.isInitialized,
+      isStarting: isStarting ?? this.isStarting,
       isRunning: isRunning ?? this.isRunning,
       size: size ?? this.size,
       torchState: torchState ?? this.torchState,
+      deviceOrientation: deviceOrientation ?? this.deviceOrientation,
       zoomScale: zoomScale ?? this.zoomScale,
     );
   }
